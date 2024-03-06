@@ -2,6 +2,10 @@ import json
 import zmq
 import threading
 import multiprocessing
+import numpy as np
+
+import time
+import sys
 
 
 class TCPManager:
@@ -43,9 +47,8 @@ class TCPManager:
         while obj.run:
             event = self.in_poller.poll(100)
             if event:
-                msg = self.in_sock.recv()
-                payload = json.loads(msg)
-                obj.latest_data = payload
+                msg = self.in_sock.recv_pyobj()
+                obj.latest_data = msg
 
     def receive_msg(self, timeout=100):
         event = self.in_poller.poll(timeout)
@@ -56,6 +59,11 @@ class TCPManager:
             print("Timed out ({} ms) waiting for message...".format(timeout))
 
     def send_msg(self, msg):
-        payload = json.dumps(msg)
-        self.out_sock.send(payload.encode("utf-8"))
+        self.out_sock.send_pyobj(msg)
+
+    def json_serialize(self, obj):
+        if isinstance(obj, np.ndarray):
+            # Ma takto cca 2.5x vetsi velikost jako string
+            return str(obj.tobytes())
+        return obj
 
