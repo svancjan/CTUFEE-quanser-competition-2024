@@ -193,7 +193,7 @@ def controlLoop():
     with open("sensorConfiguration.yaml", "r") as file:
             sensorConfig = yaml.safe_load(file)
     
-    tcpManager = TCPManager(tcpConfig["QCarIP"], tcpConfig["ROSToCarPort"], tcpConfig["CarToROSPort"])
+    tcpManager = TCPManager(tcpConfig["ROSIP"], tcpConfig["ROSToCarPort"], tcpConfig["CarToROSPort"])
     cameras = QCarCameras(enableFront=True, enableBack=False, enableLeft=True, enableRight=True)
     realrense = QCarRealSense(mode=sensorConfig["RealSenseMode"])
     gps = QCarGPS(initialPose=initialPose)
@@ -222,7 +222,7 @@ def controlLoop():
             #region : Read from sensors and update state estimates
             #qcar.read() done in the qcarReadout.create_packet() function
             if enableSteeringControl:
-                if qcarReadout.isGpsAvailable:
+                if qcarReadout.carData["isGpsAvailable"]:
                     y_gps = np.array([
                         gps.position[0],
                         gps.position[1],

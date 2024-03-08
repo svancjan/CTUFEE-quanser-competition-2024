@@ -1,4 +1,4 @@
-QCarIP: "localhost"
-ROSIP: "localhost"
+QCarIP: "147.32.86.138"
+ROSIP: "147.32.86.181"
 CarToROSPort: 5555
 ROSToCarPort: 5556

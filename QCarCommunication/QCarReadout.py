@@ -26,15 +26,12 @@ class QCarReadout():
         self.gps = gps
 
         self.carData = dict()
+        self.carData["Type"] = "CarData"
+        
         self.camerasData = dict()
+        self.camerasData["Type"] = "CamerasData"
 
-        self.isGpsAvailable = None
-        self.gpsPosition = np.zeros((3)) # position x, position y, position z (z is 0)
-        self.gpsOrientation = np.zeros((3)) # roll, pitch, yaw
-
-        self.isLidarAvailable = None
-
-        self.timeEE = list()
+        #self.timeEE = list()
         
         self.tcp_manager = tcp_manager
         self.tcp_manager.start_receiving()
@@ -84,11 +81,11 @@ class QCarReadout():
                 self.camerasData["realSenseIRDataRight"] = self.realSense.imageBufferIRRight
 
     def create_packet(self):
-        t0 = time.time()
+        #t0 = time.time()
         self.readCar()
         self.tcp_manager.send_msg(self.carData)
-        self.timeEE.append(time.time()-t0)
-        #self.readCameras()
-        #self.tcp_manager.send_msg(self.camerasData)
+        self.readCameras()
+        self.tcp_manager.send_msg(self.camerasData)
+        #self.timeEE.append(time.time()-t0)
         #print(sum(self.timeEE)/len(self.timeEE), end="\r")
         

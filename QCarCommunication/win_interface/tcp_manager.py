@@ -52,11 +52,12 @@ class TCPManager:
 
     def receive_msg(self, timeout=100):
         event = self.in_poller.poll(timeout)
+        msg = None
         if event:
-            msg = self.in_sock.recv()
-            payload = json.loads(msg)
+            msg = self.in_sock.recv_pyobj()
         else:
             print("Timed out ({} ms) waiting for message...".format(timeout))
+        return msg
 
     def send_msg(self, msg):
         self.out_sock.send_pyobj(msg)
