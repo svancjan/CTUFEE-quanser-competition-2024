@@ -1,4 +1,4 @@
-from pal.products.qcar import QCar, QCarCameras, QCarLidar, QCarRealSense, QCarGPS
+from pal.products.qcar import QCar, QCarCameras, QCarLidar, QCarRealSense, QCarGPS, IS_PHYSICAL_QCAR
 import numpy as np
 import json
 
@@ -33,25 +33,32 @@ class QCarReadout():
         self.camerasDataIterator = 0
         
         self.tcp_manager = tcp_manager
-        self.tcp_manager.start_receiving()
 
         with open("sensorConfiguration.yaml", "r") as file:
             self.sensorConfig = yaml.safe_load(file)
             
         self.carReadoutThread = threading.Thread(target=self.readCar, args=(self, ))
         self.camerasReadoutThread = threading.Thread(target=self.readCameras, args=(self, ))
-        self.carReadoutThread.start()
-        self.camerasReadoutThread.start()
+        self.pushControlDataThread = threading.Thread(target=self.pushControl, args=(self, ))
+        
         self.carDataLock = threading.Lock()
         self.camerasDataLock = threading.Lock()
+        self.qCarInterfaceLock = threading.Lock()
         
         self.timeCar = list()
         self.timeCamera = list()
+        
+    def startDataTransmittion(self):
+        self.carReadoutThread.start()
+        self.camerasReadoutThread.start()
+        self.pushControlDataThread.start()
 
     def readCar(self, obj):
         while obj.isExit is False:
             t0 = time.time()
+            obj.qCarInterfaceLock.acquire()
             obj.car.read()
+            obj.qCarInterfaceLock.release()
             obj.carDataLock.acquire()
             obj.carData["motorCurrent"] = obj.car.motorCurrent # np.zeros(2, dtype=np.float64)
             obj.carData["batteryVoltage"] = obj.car.batteryVoltage # np.zeros(2, dtype=np.float64)
@@ -107,6 +114,14 @@ class QCarReadout():
             obj.camerasDataList = list(obj.camerasData.keys())
             obj.camerasDataLock.release()
             obj.timeCamera.append(time.time()-t0)
+            
+    def pushControl(self, obj):
+        while obj.isExit is False:
+            message = obj.tcp_manager.receive_msg() # u, delta
+            if (message is not None):
+                obj.qCarInterfaceLock.acquire()
+                obj.car.write(throttle=message[0], steering=message[1], LEDs=None)
+                obj.qCarInterfaceLock.release()
 
     def createCarPacket(self):
         self.carDataLock.acquire()
@@ -149,10 +164,11 @@ def __main__():
         gps=gps
         )
     
+    qcarReadout.startDataTransmittion()
+    
     timeEE = list()
     tStart = time.time()
     t0 = time.time()
-    
     while True:
         qcarReadout.createCarPacket()
         qcarReadout.createCamerasPacketPart()
@@ -168,15 +184,15 @@ def __main__():
             break
         
     # Stop all threads safely
-    qcarReadout.carDataLock.acquire()
-    qcarReadout.camerasDataLock.acquire()
+    #qcarReadout.carDataLock.acquire()
+    #qcarReadout.camerasDataLock.acquire()
     qcarReadout.isExit = True
-    qcarReadout.carDataLock.release()
-    qcarReadout.camerasDataLock.release()
+    #qcarReadout.carDataLock.release()
+    #qcarReadout.camerasDataLock.release()
     
     qcarReadout.carReadoutThread.join()
     qcarReadout.camerasReadoutThread.join()
-    qcarReadout.tcp_manager.terminate()
+    qcarReadout.pushControlDataThread.join()
     
     print(max(timeEE),
           sum(timeEE)/len(timeEE),

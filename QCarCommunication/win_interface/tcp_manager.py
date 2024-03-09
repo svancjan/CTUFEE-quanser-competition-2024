@@ -18,46 +18,31 @@ class TCPManager:
 
         self.out_sock = self.context_push.socket(zmq.PUSH)
         self.out_sock.connect("".join(("tcp://", self.IP, ":", str(self.out_port))))
+        self.out_sock.setsockopt(zmq.LINGER, 100) # wait 100 ms for messages to be sent before closing socket
 
         self.in_sock = self.context_pull.socket(zmq.PULL)
         self.in_sock.bind("".join(("tcp://*:", str(self.in_port))))
+        self.in_sock.setsockopt(zmq.LINGER, 100) # wait 100 ms for messages to be sent before closing socket
 
         self.in_poller = zmq.Poller()
         self.in_poller.register(self.in_sock, zmq.POLLIN)
 
-        self.latest_data = dict()
-        self.run = True
-        self.recv_thread = threading.Thread(target=self.receive_msgs, args=(self, ))
-
     def terminate(self):
         print("TCPManger will wait for threads to join...")
-        self.run = False
-        self.recv_thread.join()
         self.out_sock.close()
         self.in_sock.close()
+        print("Sockets closed.")
         self.context_push.term()
         self.context_pull.term()
         print("TCPManager terminated.")
 
-    def start_receiving(self):
-        print("TCPManager will start receiving thread...")
-        self.recv_thread.start()
-        print("Thread started")
-
-    def receive_msgs(self, obj):
-        while obj.run:
-            event = self.in_poller.poll(100)
-            if event:
-                msg = self.in_sock.recv_pyobj()
-                obj.latest_data = msg
-
-    def receive_msg(self, timeout=100):
+    def receive_msg(self, timeout=10):
         event = self.in_poller.poll(timeout)
         msg = None
         if event:
             msg = self.in_sock.recv_pyobj()
-        else:
-            print("Timed out ({} ms) waiting for message...".format(timeout))
+        #else:
+        #    print("Timed out ({} ms) waiting for message...".format(timeout))
         return msg
 
     def send_msg(self, msg):
