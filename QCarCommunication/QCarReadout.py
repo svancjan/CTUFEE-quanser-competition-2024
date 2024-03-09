@@ -8,7 +8,6 @@ import threading
 
 import time
 
-
 class QCarReadout():
     def __init__(
             self,
@@ -24,68 +23,167 @@ class QCarReadout():
         self.lidar = lidar # Lidar object
         self.realSense = realSense # Camera3D object
         self.gps = gps
+        
+        self.isExit = False
 
         self.carData = dict()
-        self.carData["Type"] = "CarData"
         
         self.camerasData = dict()
-        self.camerasData["Type"] = "CamerasData"
-
-        #self.timeEE = list()
+        self.camerasDataList = list()
+        self.camerasDataIterator = 0
         
         self.tcp_manager = tcp_manager
         self.tcp_manager.start_receiving()
 
         with open("sensorConfiguration.yaml", "r") as file:
             self.sensorConfig = yaml.safe_load(file)
+            
+        self.carReadoutThread = threading.Thread(target=self.readCar, args=(self, ))
+        self.camerasReadoutThread = threading.Thread(target=self.readCameras, args=(self, ))
+        self.carReadoutThread.start()
+        self.camerasReadoutThread.start()
+        self.carDataLock = threading.Lock()
+        self.camerasDataLock = threading.Lock()
+        
+        self.timeCar = list()
+        self.timeCamera = list()
 
-    def readCar(self):
-        self.car.read()
-        self.carData["motorCurrent"] = self.car.motorCurrent # np.zeros(2, dtype=np.float64)
-        self.carData["batteryVoltage"] = self.car.batteryVoltage # np.zeros(2, dtype=np.float64)
-        self.carData["motorEncoder"] = self.car.motorEncoder # np.zeros(1, dtype=np.int32)
-        self.carData["motorTach"] = self.car.motorTach # np.zeros(1, dtype=np.float64)
-        self.carData["accelerometer"] = self.car.accelerometer # np.zeros(3, dtype=np.float64) # x,y,z
-        self.carData["gyroscope"] = self.car.gyroscope # np.zeros(3, dtype=np.float64) # x,y,z
-        if (self.gps is not None):
-            self.carData["isGpsAvailable"] = self.gps.readGPS()
-            self.carData["gpsPosition"] = self.gps.position # np.zeros((3)) # position x, position y, position z (z is 0)
-            self.carData["gpsOrientation"] = self.gps.orientation # np.zeros((3)) # roll, pitch, yaw
+    def readCar(self, obj):
+        while obj.isExit is False:
+            t0 = time.time()
+            obj.car.read()
+            obj.carDataLock.acquire()
+            obj.carData["motorCurrent"] = obj.car.motorCurrent # np.zeros(2, dtype=np.float64)
+            obj.carData["batteryVoltage"] = obj.car.batteryVoltage # np.zeros(2, dtype=np.float64)
+            obj.carData["motorEncoder"] = obj.car.motorEncoder # np.zeros(1, dtype=np.int32)
+            obj.carData["motorTach"] = obj.car.motorTach # np.zeros(1, dtype=np.float64)
+            obj.carData["accelerometer"] = obj.car.accelerometer # np.zeros(3, dtype=np.float64) # x,y,z
+            obj.carData["gyroscope"] = obj.car.gyroscope # np.zeros(3, dtype=np.float64) # x,y,z
+            if (obj.gps is not None):
+                obj.carData["isGpsAvailable"] = obj.gps.readGPS()
+                obj.carData["gpsPosition"] = obj.gps.position # np.zeros((3)) # position x, position y, position z (z is 0)
+                obj.carData["gpsOrientation"] = obj.gps.orientation # np.zeros((3)) # roll, pitch, yaw
 
-            self.carData["isLidarAvailable"] = self.gps.readLidar()
-            self.carData["lidarDistances"] = self.gps.distances # np.zeros((360)) # distances
-            self.carData["lidarAngles"] = self.gps.angles # np.zeros((360)) # angles
+                obj.carData["isLidarAvailable"] = obj.gps.readLidar()
+                obj.carData["lidarDistances"] = obj.gps.distances # np.zeros((360)) # distances
+                obj.carData["lidarAngles"] = obj.gps.angles # np.zeros((360)) # angles
+            obj.carDataLock.release()
+            obj.timeCar.append(time.time()-t0)
 
-    def readCameras(self):
-        if (self.cameras is not None):
-            self.cameras.readAll()
-            if (self.cameras.csiRight is not None):
-                self.camerasData["rightCameraData"] = self.cameras.csiRight.imageData
-            if (self.cameras.csiBack is not None):
-                self.camerasData["backCameraData"] = self.cameras.csiBack.imageData
-            if (self.cameras.csiLeft is not None):
-                self.camerasData["leftCameraData"] = self.cameras.csiLeft.imageData
-            if (self.cameras.csiFront is not None):
-                self.camerasData["frontCameraData"] = self.cameras.csiFront.imageData
+    def readCameras(self, obj):
+        while obj.isExit is False:
+            t0 = time.time()
+            if (obj.cameras is not None):
+                obj.cameras.readAll()
+                obj.camerasDataLock.acquire()
+                if (obj.cameras.csiRight is not None):
+                    obj.camerasData["rightCameraData"] = obj.cameras.csiRight.imageData
+                if (obj.cameras.csiBack is not None):
+                    obj.camerasData["backCameraData"] = obj.cameras.csiBack.imageData
+                if (obj.cameras.csiLeft is not None):
+                    obj.camerasData["leftCameraData"] = obj.cameras.csiLeft.imageData
+                if (obj.cameras.csiFront is not None):
+                    obj.camerasData["frontCameraData"] = obj.cameras.csiFront.imageData
+                obj.camerasDataLock.release()
 
-        if (self.realSense is not None):
-            if ('rgb' in self.sensorConfig["RealSenseMode"].lower()):
-                self.realSense.read_RGB()
-                self.camerasData["realSenseRGBData"] = self.realSense.imageBufferRGB
-            if ('depth' in self.sensorConfig["RealSenseMode"].lower()):
-                self.realSense.read_depth()
-                self.camerasData["realSenseDepthData"] = self.realSense.imageBufferDepthM
-            if ('ir' in self.sensorConfig["RealSenseMode"].lower()):
-                self.realSense.read_IR()
-                self.camerasData["realSenseIRDataLeft"] = self.realSense.imageBufferIRLeft
-                self.camerasData["realSenseIRDataRight"] = self.realSense.imageBufferIRRight
+            if (obj.realSense is not None):
+                if ('rgb' in obj.sensorConfig["RealSenseMode"].lower()):
+                    obj.realSense.read_RGB()
+                    obj.camerasDataLock.acquire()
+                    obj.camerasData["realSenseRGBData"] = obj.realSense.imageBufferRGB
+                    obj.camerasDataLock.release()
+                if ('depth' in obj.sensorConfig["RealSenseMode"].lower()):
+                    obj.realSense.read_depth()
+                    obj.camerasDataLock.acquire()
+                    obj.camerasData["realSenseDepthData"] = obj.realSense.imageBufferDepthM
+                    obj.camerasDataLock.release()
+                if ('ir' in obj.sensorConfig["RealSenseMode"].lower()):
+                    obj.realSense.read_IR()
+                    obj.camerasDataLock.acquire()
+                    obj.camerasData["realSenseIRDataLeft"] = obj.realSense.imageBufferIRLeft
+                    obj.camerasData["realSenseIRDataRight"] = obj.realSense.imageBufferIRRight
+                    obj.camerasDataLock.release()
+            obj.camerasDataLock.acquire()
+            obj.camerasDataList = list(obj.camerasData.keys())
+            obj.camerasDataLock.release()
+            obj.timeCamera.append(time.time()-t0)
 
-    def create_packet(self):
-        #t0 = time.time()
-        self.readCar()
+    def createCarPacket(self):
+        self.carDataLock.acquire()
         self.tcp_manager.send_msg(self.carData)
-        self.readCameras()
-        self.tcp_manager.send_msg(self.camerasData)
-        #self.timeEE.append(time.time()-t0)
-        #print(sum(self.timeEE)/len(self.timeEE), end="\r")
+        self.carDataLock.release()
+        
+    def createCamerasPacketPart(self):
+        self.camerasDataLock.acquire()
+        if (len(self.camerasDataList) > 0):
+            if (self.camerasDataIterator >= len(self.camerasDataList)):
+                self.camerasDataIterator = 0
+            self.tcp_manager.send_msg((
+                self.camerasDataList[self.camerasDataIterator], # key
+                self.camerasData[self.camerasDataList[self.camerasDataIterator]]) # value
+                                      )
+            self.camerasDataIterator += 1
+        self.camerasDataLock.release()
+        
+def __main__():
+    
+    with open("tcpConfiguration.yaml", "r") as file:
+            tcpConfig = yaml.safe_load(file)
+    with open("sensorConfiguration.yaml", "r") as file:
+            sensorConfig = yaml.safe_load(file)
+    
+    qcar = QCar(readMode=1, frequency=200)
+    tcpManager = TCPManager(tcpConfig["ROSIP"], tcpConfig["ROSToCarPort"], tcpConfig["CarToROSPort"])
+    cameras = QCarCameras(enableFront=sensorConfig["FrontUWCamEnable"],
+                          enableBack=sensorConfig["BackUWCamEnable"],
+                          enableLeft=sensorConfig["LeftUWCamEnable"],
+                          enableRight=sensorConfig["RightUWCamEnable"])
+    realrense = QCarRealSense(mode=sensorConfig["RealSenseMode"])
+    gps = QCarGPS()
+        
+    qcarReadout = QCarReadout(
+        qcar,
+        tcp_manager=tcpManager,
+        cameras=cameras,
+        realSense=realrense,
+        gps=gps
+        )
+    
+    timeEE = list()
+    tStart = time.time()
+    t0 = time.time()
+    
+    while True:
+        qcarReadout.createCarPacket()
+        qcarReadout.createCamerasPacketPart()
+        t = time.time()-t0
+        timeEE.append(t)
+        if t > 0.02:
+            qcarReadout.camerasDataLock.acquire()
+            print("Time exceeded:", qcarReadout.camerasDataIterator-1)
+            qcarReadout.camerasDataLock.release()
+        t0 = time.time()
+        
+        if time.time() - tStart > 10:
+            break
+        
+    # Stop all threads safely
+    qcarReadout.carDataLock.acquire()
+    qcarReadout.camerasDataLock.acquire()
+    qcarReadout.isExit = True
+    qcarReadout.carDataLock.release()
+    qcarReadout.camerasDataLock.release()
+    
+    qcarReadout.carReadoutThread.join()
+    qcarReadout.camerasReadoutThread.join()
+    qcarReadout.tcp_manager.terminate()
+    
+    print(max(timeEE),
+          sum(timeEE)/len(timeEE),
+              sum(qcarReadout.timeCar)/(len(qcarReadout.timeCar)+1),
+              sum(qcarReadout.timeCamera)/(len(qcarReadout.timeCamera)+1),
+              timeEE)
+    print(qcarReadout.camerasDataList)
+    
+__main__()
         

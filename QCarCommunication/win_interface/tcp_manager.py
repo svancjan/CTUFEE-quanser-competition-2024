@@ -27,11 +27,12 @@ class TCPManager:
 
         self.latest_data = dict()
         self.run = True
-        self.recv_thread = threading.Thread(target=self.receive_msgs, daemon=True, args=(self, ))
+        self.recv_thread = threading.Thread(target=self.receive_msgs, args=(self, ))
 
-    def stop(self):
+    def terminate(self):
         print("TCPManger will wait for threads to join...")
         self.run = False
+        self.recv_thread.join()
         self.out_sock.close()
         self.in_sock.close()
         self.context_push.term()
@@ -60,11 +61,5 @@ class TCPManager:
         return msg
 
     def send_msg(self, msg):
-        self.out_sock.send_pyobj(msg)
-
-    def json_serialize(self, obj):
-        if isinstance(obj, np.ndarray):
-            # Ma takto cca 2.5x vetsi velikost jako string
-            return str(obj.tobytes())
-        return obj
+        self.out_sock.send_pyobj(msg, copy=True)
 
