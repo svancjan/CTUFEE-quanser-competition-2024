@@ -1,13 +1,19 @@
 import threading
-import rclpy
 import numpy as np
 from sensor_msgs.msg import Image
+from std_msgs.msg import String, ByteMultiArray, MultiArrayLayout, MultiArrayDimension
 from win_interface.tcp_manager import TCPManager
 import yaml
-from TCPReceiver import TCPReceiver
+import time
+import pickle
+import sys
 
-class QCarDataPublisher():
+import rclpy
+from rclpy.node import Node
+
+class QCarDataPublisher(Node):
     def __init__(self) -> None:
+        super().__init__('qcarDataPublisher')
         self.shutDownRequired = False
         
         with open("tcpConfiguration.yaml", "r") as file:
@@ -21,55 +27,54 @@ class QCarDataPublisher():
         self.carDataLock = threading.Lock()
         self.camerasDataLock = threading.Lock()
         
+        self.rosPublisher = self.create_publisher(ByteMultiArray, 'CameraRGB', 1)
+        self.rosTimer = self.create_timer(0.01, self.send_array)
+    
     def cyclicReceiveTCP(self):        
         while True:
             msg = self.tcp_manager.receive_msg()
             if (msg is not None):
-                if (msg["Type"] == "CarData"):
+                if (type(msg) == dict):
                     self.carDataLock.acquire()
                     self.carData = msg
                     self.carDataLock.release()
-                elif (msg["Type"] == "CamerasData"):
+                elif (type(msg) == tuple):
                     self.camerasDataLock.acquire()
-                    self.camerasData = msg
+                    self.camerasData[msg[0]] = msg[1]
                     self.camerasDataLock.release()
             continue
         
     def send_array(self):
-        # Initialize the ROS node
-        rclpy.init()
-
-        # Create a publisher to send the numpy array
-        array_pub = rclpy.create_publisher(Image, 'CameraRGB', 0)
-
-        # Create a ROS rate object to control the publishing rate
-        rate = rclpy.Rate(100)  # 100 Hz
-
-        while (rclpy.ok() or self.shutDownRequired):
+        if rclpy.ok():
             # Convert the numpy array to a Image message
-            array_msg = Image()
-            
+            array_msg = ByteMultiArray()
             if("realSenseRGBData" in self.camerasData.keys()):
                 self.camerasDataLock.acquire()
-                array_msg.data = self.camerasData["realSenseRGBData"].flatten().tolist()
+                t0 = time.time()
+                #layout = MultiArrayLayout()
+                #layout.dim.append(MultiArrayDimension())
+                #layout.dim[0].size = 921600 # 640*480*3
+                #array_msg.data = {bytes(self.camerasData["realSenseRGBData"])}
+                array_msg.data = {pickle.dumps(self.camerasData["realSenseRGBData"],protocol=pickle.DEFAULT_PROTOCOL)}
+                print("assign:", time.time()-t0, sys.getsizeof(array_msg.data))
+                a = array_msg.data.pop()
+                print("arr:", time.time()-t0, pickle.loads(a).shape)
                 self.camerasDataLock.release()
             # Publish the array message
-            array_pub.publish(array_msg)
-
-            # Sleep to maintain the desired publishing rate
-            rate.sleep()
+            self.rosPublisher.publish(array_msg)
 
 if __name__ == '__main__':
+    rclpy.init()
     dataPublisher_ = QCarDataPublisher()
     
     # Create threads for cyclicReceiveTCP and send_array
     receive_thread = threading.Thread(target=dataPublisher_.cyclicReceiveTCP)
-    send_thread = threading.Thread(target=dataPublisher_.send_array)
     
     # Start the threads
     receive_thread.start()
-    send_thread.start()
+
+    rclpy.spin(dataPublisher_)
     
     # Wait for the threads to finish
     receive_thread.join()
-    send_thread.join()
+    rclpy.shutdown()

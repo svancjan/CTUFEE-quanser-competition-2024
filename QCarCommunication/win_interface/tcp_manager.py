@@ -55,8 +55,8 @@ class TCPManager:
         msg = None
         if event:
             msg = self.in_sock.recv_pyobj()
-        else:
-            print("Timed out ({} ms) waiting for message...".format(timeout))
+        #else:
+            #print("Timed out ({} ms) waiting for message...".format(timeout))
         return msg
 
     def send_msg(self, msg):
