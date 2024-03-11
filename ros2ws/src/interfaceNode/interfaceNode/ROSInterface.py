@@ -1,7 +1,8 @@
 import threading
 import numpy as np
-from std_msgs.msg import  ByteMultiArray, MultiArrayLayout, MultiArrayDimension
-from win_interface.tcp_manager import TCPManager
+from sensor_msgs.msg import Image
+from std_msgs.msg import String, ByteMultiArray, MultiArrayLayout, MultiArrayDimension
+from .win_interface.tcp_manager import TCPManager
 import yaml
 import time
 import pickle
@@ -15,7 +16,7 @@ class QCarDataPublisher(Node):
         super().__init__('qcarDataPublisher')
         self.shutDownRequired = False
         
-        with open("tcpConfiguration.yaml", "r") as file:
+        with open("install/interfaceNode/lib/interfaceNode/tcpConfiguration.yaml", "r") as file:
             config = yaml.safe_load(file)
 
         # Create TCPManager instance
@@ -62,7 +63,7 @@ class QCarDataPublisher(Node):
             # Publish the array message
             self.rosPublisher.publish(array_msg)
 
-def main:
+def main():
     rclpy.init()
     dataPublisher_ = QCarDataPublisher()
     
