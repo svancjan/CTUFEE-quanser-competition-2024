@@ -15,6 +15,7 @@ import numpy as np
 from threading import Thread
 import time
 import cv2
+import csv
 import pyqtgraph as pg
 
 from pal.products.qcar import QCar, QCarGPS, IS_PHYSICAL_QCAR
@@ -24,30 +25,62 @@ from hal.products.qcar import QCarEKF
 from hal.products.mats import SDCSRoadMap
 import pal.resources.images as images
 
+import matplotlib.pyplot as plt
+
+# Car constants
+WHEEL_RADIUS = 0.0342 # front/rear wheel radius in m
+ENCODER_COUNTS_PER_REV = 720.0 # counts per revolution
+WHEEL_BASE = 0.256 # front to rear wheel distance in m
+WHEEL_TRACK = 0.17 # left to right wheel distance in m
+PIN_TO_SPUR_RATIO = (13.0*19.0) / (70.0*37.0)
+    # (diff_pinion*pinion) / (spur*diff_spur)
+CPS_TO_MPS = (1/(ENCODER_COUNTS_PER_REV*4) # motor-speed unit conversion
+    * PIN_TO_SPUR_RATIO * 2*np.pi * WHEEL_RADIUS)
+
 
 #================ Experiment Configuration ================
 # ===== Timing Parameters
 # - tf: experiment duration in seconds.
 # - startDelay: delay to give filters time to settle in seconds.
 # - controllerUpdateRate: control update rate in Hz. Shouldn't exceed 500
-tf = 30
+tf = 20
+
 startDelay = 1
 controllerUpdateRate = 100
+
+current = [] #battery current array
+gyrox = [] #gyro x,y,z roational speed
+gyroy = []
+gyroz = []
+accerx = [] #gyro x,y,z acceleration
+accery = []
+accerz = []
+contSpeed = []
+motorSpeed = [] #motor speeed
+timeLog = [] #timevector log
+x_log  = []
+y_log  = [] #log state estimate
+y_gps_log = []
+th_log = []
+t_move = []
+gazu = []
+#contSpeed = np.array([]) #front wheel contact speed
+
 
 # ===== Speed Controller Parameters
 # - v_ref: desired velocity in m/s
 # - K_p: proportional gain for speed controller
 # - K_i: integral gain for speed controller
-v_ref = 0.5
-K_p = 0.1
-K_i = 1
+v_ref = 5
+K_p = 1000
+K_i = 500
 
 # ===== Steering Controller Parameters
 # - enableSteeringControl: whether or not to enable steering control
 # - K_stanley: K gain for stanley controller
 # - nodeSequence: list of nodes from roadmap. Used for trajectory generation.
-enableSteeringControl = False
-K_stanley = 1
+enableSteeringControl = True
+K_stanley = 5
 nodeSequence = [0, 20, 0]
 
 #endregion
@@ -77,10 +110,93 @@ def sig_handler(*args):
 signal.signal(signal.SIGINT, sig_handler)
 #endregion
 
+class SpeedFeedForwardController:
+    def __init__(self, k=1):
+        self.L1 = 5.34
+        self.L2 = 15.2
+        self.S1 = 6.84
+        self.S2 = 11.17
+        self.Path = 15.5
+        self.x = 0
+        self.v = 0
+        self.v_ref = 0
+        self.stop_done1 = False
+        self.stop_done2 = False
+        self.u_last = 0
+        self.maxThrottle = 1
+        self.time_slept = 0
+
+
+
+    def update(self, v, dt):
+        u = self.u_last
+        a = -1/0.24 * v + 9.4/0.24 * u
+        #v = a*dt
+        #self.v += v
+        self.x += v*dt
+        safety = 0.1
+        print("self.x: ", self.x)
+
+        # First run to Stop 1
+        if self.x < (self.S1):
+            self.v_ref = 4
+        else: 
+            if self.stop_done1 == False:
+                self.v_ref = 0
+                # wait for 3 seconds
+                if(self.time_slept < 3):
+                    self.time_slept += dt
+                else:
+                    self.v_ref = 4
+                    self.stop_done1 = True
+                    self.time_slept = 0
+                
+            
+            if (self.x < self.S2) and (self.stop_done1 == True):
+                self.v_ref = 4
+            elif(self.stop_done1 == True):
+                if self.stop_done2 == False:
+                    self.v_ref = 0
+                    print("waiting at stop 2", self.time_slept)
+                    # wait 3 seconds
+                    if(self.time_slept < 3) and (self.stop_done2 == False):
+                        self.time_slept += dt
+                    else:  
+                        self.v_ref = 4
+                        self.stop_done2 = True
+                        self.time_slept = 0
+
+                if (self.x < self.Path) and (self.stop_done2 == True):
+                    self.v_ref = 4
+                if (self.x > self.Path) and (self.stop_done2 == True):
+                    self.v_ref = 0
+                    print("I am at the finish line")
+
+
+
+        print("v_ref: ", self.v_ref)
+        if 1 < self.v_ref - 0.1:
+            out = 1  # Turn ON the GAZU
+        elif 1 > self.v_ref + 0.1:
+            out = 0  # Turn OFF the GAZU
+        else:
+            out = 0
+
+        self.u_last = out
+        return np.clip(
+            out,
+            -self.maxThrottle, #min
+            self.maxThrottle   #max
+        )
+
+
+
+
+
 class SpeedController:
 
     def __init__(self, kp=0, ki=0):
-        self.maxThrottle = 0.3
+        self.maxThrottle = 1
 
         self.kp = kp
         self.ki = ki
@@ -90,97 +206,31 @@ class SpeedController:
 
     # ==============  SECTION A -  Speed Control  ====================
     def update(self, v, v_ref, dt):
-        '''
-        e = v_ref - v
-        self.ei += dt*e
+        
+        #e = v_ref - v
+        #if abs(e) - 0.1 > 0:
+        #    out = 1
+        #else:
+        #    out = 0
+        if v < v_ref - 0.1:
+            out = 1  # Turn ON the GAZU
+        elif v > v_ref + 0.1:
+            out = -1  # Turn OFF the GAZU
+        else:
+            out = 0
 
         return np.clip(
-            self.kp*e + self.ki*self.ei,
-            -self.maxThrottle,
-            self.maxThrottle
+            out,
+            -self.maxThrottle, #min
+            self.maxThrottle   #max
         )
-        '''
+        #return np.clip(
+        #    self.kp*e + self.ki*self.ei,
+        #    -self.maxThrottle, #min
+        #    self.maxThrottle   #max
+        #)
+        
         return 0
-
-
-
-class MyStanley:
-    # Stanley Steering Controller implementation in Python
-
-import numpy as np
-
-    def __init__(self, waypoints, k=1, cyclic=True):
-        self.maxSteeringAngle = np.pi/6
-
-        self.wp = waypoints
-        self.N = len(waypoints[0, :])
-        self.wpi = 0
-
-        self.k = k
-        self.cyclic = cyclic
-
-        self.p_ref = (0, 0)
-        self.th_ref = 0
-
-    def stanley_control(self, x, y, yaw, v, map_x, map_y, map_yaw):
-        """
-        Stanley Steering Controller implementation.
-
-        Args:
-            x (float): Current x-coordinate of the vehicle.
-            y (float): Current y-coordinate of the vehicle.
-            yaw (float): Current yaw angle of the vehicle (in radians).
-            v (float): Current velocity of the vehicle.
-            map_x (list): List of x-coordinates of waypoints in the map.
-            map_y (list): List of y-coordinates of waypoints in the map.
-            map_yaw (list): List of yaw angles of waypoints in the map (in radians).
-
-        Returns:
-            float: Steering angle (delta) in radians.
-        """
-        k = 0.1  # Gain for cross-track error
-        L = 2.5  # Look-ahead distance
-
-        # Calculate cross-track error (distance from vehicle to desired path)
-        dx = [x - wx for wx in map_x]
-        dy = [y - wy for wy in map_y]
-        d = [np.sqrt(dx_i**2 + dy_i**2) for dx_i, dy_i in zip(dx, dy)]
-        min_d = min(d)
-        min_idx = d.index(min_d)
-
-        # Calculate desired yaw angle (angle between vehicle and desired path)
-        yaw_desired = np.arctan2(map_y[min_idx] - y, map_x[min_idx] - x)
-
-        # Calculate cross-track error (signed distance)
-        if np.dot([np.cos(yaw), np.sin(yaw)], [dx[min_idx], dy[min_idx]]) < 0:
-            cte = -min_d
-        else:
-            cte = min_d
-
-        # Calculate steering angle (delta)
-        delta = yaw - yaw_desired + np.arctan(k * cte / v)
-
-        return delta
-
-# Example usage
-if __name__ == "__main__":
-    # Example map waypoints (replace with your own map data)
-    map_x = [0, 10, 20, 30, 40]
-    map_y = [0, 5, 10, 15, 20]
-    map_yaw = [0, 0.1, 0.2, 0.3, 0.4]
-
-    # Example vehicle state
-    x = 5
-    y = 2
-    yaw = 0.1
-    v = 10
-
-    # Calculate steering angle using Stanley controller
-    delta = stanley_control(x, y, yaw, v, map_x, map_y, map_yaw)
-
-    print(f"Steering angle (delta): {delta:.4f} radians")
-
-
 
 class SteeringController:
 
@@ -234,28 +284,37 @@ class SteeringController:
         
         return 0
 
+
 def controlLoop():
     #region controlLoop setup
     global KILL_THREAD
-    u = 0
-    delta = 0
+    u = 0 #gazu
+    delta = 0 #steering
+    v_ref = 5
     # used to limit data sampling to 10hz
-    countMax = controllerUpdateRate / 10
+    countMax = controllerUpdateRate /100
     count = 0
+    lastenc = None
+    tenclast = None
     #endregion
 
     #region Controller initialization
+    speedController = SpeedFeedForwardController()
+
+    """
     speedController = SpeedController(
         kp=K_p,
         ki=K_i
     )
+    """
+
     if enableSteeringControl:
         steeringController = SteeringController(
             waypoints=waypointSequence,
             k=K_stanley
         )
     #endregion
-
+    x_total = 0
     #region QCar interface setup
     qcar = QCar(readMode=1, frequency=controllerUpdateRate)
     if enableSteeringControl:
@@ -264,16 +323,26 @@ def controlLoop():
     else:
         gps = memoryview(b'')
     #endregion
-
     with qcar, gps:
         t0 = time.time()
         t=0
+        t_start = 0
+        setttle = 0
         while (t < tf+startDelay) and (not KILL_THREAD):
             #region : Loop timing update
             tp = t
             t = time.time() - t0
             dt = t-tp
             #endregion
+            if t % 5 > 4.99:
+                print(v_ref)
+                if v_ref > 0:
+                    v_ref = 0
+                    t_start = 0
+                else:
+                    v_ref = 5
+                    t_start = time.time()
+                    setttle = 0
 
             #region : Read from sensors and update state estimates
             qcar.read()
@@ -301,9 +370,19 @@ def controlLoop():
                 x = ekf.x_hat[0,0]
                 y = ekf.x_hat[1,0]
                 th = ekf.x_hat[2,0]
+                # log state ----------------------------
+                x_total += x
+                y_gps_log.append(gps.position[1])
+                th_log.append(th)
+                t_move.append(t)
+                # --------------------------------------
                 p = ( np.array([x, y])
                     + np.array([np.cos(th), np.sin(th)]) * 0.2)
+                
             v = qcar.motorTach
+            if (v > 0.93*3.6) and v_ref == 5 and setttle == 0:
+                print(t_start-time.time())
+                setttle = 1
             #endregion
 
             #region : Update controllers and write to car
@@ -311,8 +390,18 @@ def controlLoop():
                 u = 0
                 delta = 0
             else:
-                #region : Speed controller update
-                u = speedController.update(v, v_ref, dt)
+                #region : Speed controller update¨
+
+                #if  (1 <= t < 2.9) or (5.9 <= t < 7.1) or (10.1 <= t < 11.3):
+                #    v_ref = 4
+                #else:
+                #    v_ref = 0
+                if  (t > 0.1):
+                    u = speedController.update(v, dt)
+                else:
+                    u = 0
+
+                
                 #endregion
 
                 #region : Steering controller update
@@ -321,14 +410,48 @@ def controlLoop():
                 else:
                     delta = 0
                 #endregion
+            
+            qcar.write(u, 0)
 
-            qcar.write(u, delta)
             #endregion
 
             #region : Update Scopes
             count += 1
             if count >= countMax and t > startDelay:
                 t_plot = t - startDelay
+
+
+                if lastenc is None:  
+                    print(t_plot)
+                    tenclast = time.time()            
+                    contSpeed.append(qcar.motorEncoder[0]-qcar.motorEncoder[0])
+                    lastenc = qcar.motorEncoder[0]
+                    #np.concatenate(contSpeed, qcar.motorEncoder, axis=0)
+                    #contSpeed.append(qcar.motorEncoder - qcar.motorEncoder)
+                else:
+                    temp = time.time()
+                    if abs(temp - tenclast) >1:
+                        contSpeed.append(None)
+                        print("Error sample")
+                    else:
+                        cmpSpeed = ((qcar.motorEncoder[0] - lastenc)/(temp - tenclast))*CPS_TO_MPS
+                        contSpeed.append(cmpSpeed)
+
+                    #print((qcar.motorEncoder[0] - lastenc)/(temp - tenclast))
+                    lastenc = qcar.motorEncoder[0]
+                    tenclast = temp
+                gazu.append(u)
+                current.append(qcar.motorCurrent)          
+                gyrox.append(qcar.gyroscope[0])        
+                gyroy.append(qcar.gyroscope[1])        
+                gyroz.append(qcar.gyroscope[2])
+                accerx.append(qcar.accelerometer[0])
+                accery.append(qcar.accelerometer[1])
+                accerz.append(qcar.accelerometer[2])
+                motorSpeed.append(qcar.motorTach)
+                timeLog.append(t_plot)
+                y_log.append(p[1])
+                x_log.append(p[0])
 
                 # Speed control scope
                 speedScope.axes[0].sample(t_plot, [v, v_ref])
@@ -385,7 +508,7 @@ if __name__ == '__main__':
         col=0,
         timeWindow=tf,
         yLabel='Vehicle Speed [m/s]',
-        yLim=(0, 1)
+        yLim=(0, 10)
     )
     speedScope.axes[0].attachSignal(name='v_meas', width=2)
     speedScope.axes[0].attachSignal(name='v_ref')
@@ -405,7 +528,7 @@ if __name__ == '__main__':
         timeWindow=tf,
         xLabel='Time [s]',
         yLabel='Throttle Command [%]',
-        yLim=(-0.3, 0.3)
+        yLim=(-0.3, 1)
     )
     speedScope.axes[2].attachSignal()
 
@@ -423,7 +546,7 @@ if __name__ == '__main__':
             col=0,
             timeWindow=tf,
             yLabel='x Position [m]',
-            yLim=(-2.5, 2.5)
+            yLim=(-17.5, 1.5)
         )
         steeringScope.axes[0].attachSignal(name='x_meas')
         steeringScope.axes[0].attachSignal(name='x_ref')
@@ -433,7 +556,7 @@ if __name__ == '__main__':
             col=0,
             timeWindow=tf,
             yLabel='y Position [m]',
-            yLim=(-1, 5)
+            yLim=(-20, 1)
         )
         steeringScope.axes[1].attachSignal(name='y_meas')
         steeringScope.axes[1].attachSignal(name='y_ref')
@@ -468,18 +591,13 @@ if __name__ == '__main__':
             yLim=(-1, 5)
         )
 
-        im = cv2.imread(
-            images.SDCS_CITYSCAPE,
-            cv2.IMREAD_GRAYSCALE
-        )
-
         steeringScope.axes[4].attachImage(
             scale=(-0.002035, 0.002035),
             offset=(1125,2365),
             rotation=180,
             levels=(0, 255)
         )
-        steeringScope.axes[4].images[0].setImage(image=im)
+        #steeringScope.axes[4].images[0].setImage(image=im)
 
         referencePath = pg.PlotDataItem(
             pen={'color': (85,168,104), 'width': 2},
@@ -513,7 +631,77 @@ if __name__ == '__main__':
             time.sleep(0.01)
     finally:
         KILL_THREAD = True
-    #endregion
+
+    print("PLOT THE LOGGGS")
+    print(len(timeLog), )
+    # Create subplots
+    fig, axs = plt.subplots(3, 2, figsize=(12, 8))
+
+    # Plot battery current
+    axs[0, 0].plot(timeLog, gazu, label='Throttle')
+    axs[0, 0].set_title('Throttle request')
+    axs[0, 0].set_xlabel('Time')
+    axs[0, 0].set_ylabel('Current')
+
+    # Plot gyro data
+    axs[0, 1].plot(timeLog, gyrox, label='Gyro Rotational Speed x')
+    axs[0, 1].plot(timeLog, gyroy, label='Gyro Rotational Speed y')
+    axs[0, 1].plot(timeLog, gyroz, label='Gyro Rotational Speed z')
+    axs[0, 1].set_title('Gyro Rotational Speed')
+    axs[0, 1].set_xlabel('Time')
+    axs[0, 1].set_ylabel('Speed')
+
+    # Plot acceleration
+    axs[1, 0].plot(timeLog, accerx, label='Gyro Acceleration x')
+    axs[1, 0].plot(timeLog, accery, label='Gyro Acceleration y')
+    axs[1, 0].plot(timeLog, accerz, label='Gyro Acceleration z')
+    axs[1, 0].set_title('Gyro Acceleration')
+    axs[1, 0].set_xlabel('Time')
+    axs[1, 0].set_ylabel('Acceleration')
+    axs[1, 0].legend()
+
+    # Plot motor speed
+    axs[1, 1].plot(timeLog, motorSpeed, label='Motor Speed')
+    axs[1, 1].set_title('Motor Speed')
+    axs[1, 1].set_xlabel('Time')
+    axs[1, 1].set_ylabel('Speed')
+
+    axs[2, 0].plot(t_move, th_log, label='naticení')
+    axs[2, 0].set_title('Slip Ratio')
+    axs[2, 0].set_xlabel('Time')
+    axs[2, 0].set_ylabel('Slip ratio [-]')
+    axs[2, 0].legend()
+
+    # Plot lambda
+    axs[2, 1].plot(timeLog, x_log, label='X')
+    axs[2, 1].plot(timeLog, y_log, label='Y')
+    axs[2, 1].set_title('Slip Ratio')
+    axs[2, 1].set_xlabel('Time')
+    axs[2, 1].set_ylabel('Slip ratio [-]')
+    axs[2, 1].legend()
+
+    # Add legend
+    for ax in axs.flat:
+        ax.legend()
+
+    # Adjust layout
+    plt.tight_layout()
+
+    # Show the plots
+    plt.show()
+
+    assert len(timeLog) == len(motorSpeed), "Both lists must have the same length."
+
+    # Open the file in write mode ('w')
+    with open('output.csv', 'w', newline='') as f:
+        writer = csv.writer(f)
+        print("Saving to file")
+
+        # Write the lists to the file as two columns
+        for item1, item2, item3 in zip(timeLog, motorSpeed, gazu):
+            writer.writerow([item1, item2, item3])    
+
+        #endregion
     if not IS_PHYSICAL_QCAR:
         qlabs_setup.terminate()
 
