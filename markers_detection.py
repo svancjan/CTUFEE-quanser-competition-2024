@@ -65,7 +65,7 @@ def make_cc(img, treshold):
     outputs:
         connected_comp: tuple of numpy arrays <-- cv2 connected components
     '''
-    range = 15
+    range = 20
     img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     img_h = img[:, :, 0]
     img_s = img[:, :, 1]
@@ -326,7 +326,7 @@ def detect_traffic_lights(image):
     return output
 
 if __name__ == "__main__":
-    path = ".\\images\\semafor_angle.png"
+    path = ".\\images\\auto_traffic24.jpg"
     image = cv2.imread(path)
     start_time = time.time()
     road_line = detect_road(image)
