@@ -1,7 +1,7 @@
 import threading
 import numpy as np
 from std_msgs.msg import  ByteMultiArray, MultiArrayLayout, MultiArrayDimension
-from win_interface.tcp_manager import TCPManager
+from tcp_manager import TCPPublisher, TCPSubscriber
 import yaml
 import time
 import pickle
@@ -19,22 +19,31 @@ class QCarDataPublisher(Node):
             config = yaml.safe_load(file)
 
         # Create TCPManager instance
-        self.tcp_manager = TCPManager(config["QCarIP"], config["CarToROSPort"], config["ROSToCarPort"])
+        self.tcpPublisher = TCPPublisher(config["ROSToCarPort"])
+        self.tcpCarSubscriber = TCPSubscriber(config["QCarIP"], config["CarToROSPort"], bytes([0x80,0x4,0x95,0x19]))
+        self.tcpCameraSubscriber = TCPSubscriber(config["QCarIP"], config["CarToROSPort"], bytes([0x80,0x4,0x95,0x87]))
         self.carData = None
-        self.camerasData = dict()
+        self.cameraData = None
         
         self.carDataLock = threading.Lock()
         self.camerasDataLock = threading.Lock()
         
-        self.carDataPublisher = self.create_publisher(ByteMultiArray, 'CarData', 1)
-        self.rgbCameraPublisher = self.create_publisher(ByteMultiArray, 'CameraRGB', 1)
-        self.depthCameraPublisher = self.create_publisher(ByteMultiArray, 'CameraDepth', 1)
-        self.frontCameraPublisher = self.create_publisher(ByteMultiArray, 'CameraFront', 1)
+        self.carDataPublisher = self.create_publisher(ByteMultiArray, 'CarData', qos_profile=1)
+        self.rgbCameraPublisher = self.create_publisher(ByteMultiArray, 'CameraRGB', qos_profile=1)
         self.cameraTimer = self.create_timer(0.05, self.sendCameraData)
         self.carTimer = self.create_timer(0.005, self.sendCarData)
         
-        self.camerasData["realSenseRGBData"] = np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)
+        self.controlSubscriber = self.create_subscription(
+            ByteMultiArray,
+            'CarControl',
+            self.sendControlData,
+            1,
+            raw=True
+        )
+        
+        self.cameraData = (np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8), time.perf_counter())
         self.carData = dict()
+        self.carData["timeStamp"] = time.perf_counter()
         self.carData["batteryVoltage"] = np.random.uniform(10.0, 14.0)
         self.carData["motorSpeed"] = np.random.randint(0, 100)
         self.carData["temperature"] = np.random.uniform(20.0, 40.0)
@@ -42,7 +51,7 @@ class QCarDataPublisher(Node):
         self.carData["orientation"] = np.random.uniform(0.0, 360.0, size=(3,))
         self.carData["lidarData"] = np.random.uniform(0.0, 100.0, size=(360,))
     
-    def cyclicReceiveTCP(self):        
+    '''def cyclicReceiveTCP(self):        
         while True:
             msg = self.tcp_manager.receive_msg()
             if (msg is not None):
@@ -54,25 +63,36 @@ class QCarDataPublisher(Node):
                     self.camerasDataLock.acquire()
                     self.camerasData[msg[0]] = msg[1]
                     self.camerasDataLock.release()
+            continue'''
+            
+    def cyclicReceiveTCP(self):        
+        while True:
+            msg = self.tcpCarSubscriber.receive_msg()
+            if (msg is not None):
+                self.carDataLock.acquire()
+                self.carData = msg
+                self.carDataLock.release()
+            msg = self.tcpCameraSubscriber.receive_msg()
+            if (msg is not None):
+                self.camerasDataLock.acquire()
+                self.cameraData = msg
+                self.camerasDataLock.release()
             continue
         
     def sendCameraData(self):
-        t0 = time.time()
-        if rclpy.ok() and "realSenseRGBData" in self.camerasData.keys():
-            self.camerasDataLock.acquire()
-            array_msg = pickle.dumps(self.camerasData["realSenseRGBData"],protocol=pickle.DEFAULT_PROTOCOL)
-            self.camerasDataLock.release()
-            self.rgbCameraPublisher.publish(array_msg)
-            print("Publishing RS RGB data to ROS took: ", (time.time()-t0)*1000," ms")
+        t0 = time.perf_counter()
+        if rclpy.ok() and self.cameraData is not None:
+            self.rgbCameraPublisher.publish(self.cameraData)
+            print("Publishing RS RGB data to ROS took: ", (time.perf_counter()-t0)*1000," ms")
             
     def sendCarData(self):
-        t0 = time.time()
+        t0 = time.perf_counter()
         if rclpy.ok() and self.carData is not None:
-            self.carDataLock.acquire()
-            array_msg = pickle.dumps(self.carData,protocol=pickle.DEFAULT_PROTOCOL)
-            self.carDataLock.release()
-            self.carDataPublisher.publish(array_msg)
-            print("Publishing QCar data to ROS took: ", (time.time()-t0)*1000," ms")
+            self.carDataPublisher.publish(self.carData)
+            print("Publishing QCar data to ROS took: ", (time.perf_counter()-t0)*1000," ms")
+            
+    def sendControlData(self, message):
+        self.tcpPublisher.send_msg(message) # if raw
 
 def main():
     rclpy.init()

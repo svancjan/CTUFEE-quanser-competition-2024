@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'interfaceNode'
+package_name = 'win_interface'
 
 setup(
     name=package_name,
@@ -9,19 +9,19 @@ setup(
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
-        ('share/' + package_name, ['package.xml']),
-	('lib/' + package_name, [package_name + '/tcpConfiguration.yaml',package_name + '/sensorConfiguration.yaml'])
+        ('share/' + package_name, ['package.xml'])
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='otakar',
-    maintainer_email='kodytota@fel.cvut.cz',
-    description='TODO: Package description',
+    maintainer='kodytota',
+    maintainer_email='kodytota@todo.todo',
+    description='Interface to windows environment running Quanser simulation',
     license='TODO: License declaration',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-		'ROSInterface=interfaceNode.ROSInterface:main'
+		'winInterface = win_interface.WindowsInterface:main',
+		'testNode = win_interface.ROSSubscriber:main'
         ],
     },
 )

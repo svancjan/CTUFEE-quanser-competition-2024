@@ -1,4 +1,0 @@
-QCarIP: "10.0.0.203"
-ROSIP: "10.0.0.162"
-CarToROSPort: 5555
-ROSToCarPort: 5556

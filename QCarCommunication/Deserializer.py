@@ -1,4 +1,4 @@
-import numpy, pickle
+import pickle
 
 def deserialize_message(message):
     try:
