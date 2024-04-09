@@ -5,6 +5,7 @@ import time
 import sys
 
 from win_interface import Deserializer
+import pickle
 
 class ROSTopicSubscriber(Node):
     def __init__(self):
@@ -15,12 +16,15 @@ class ROSTopicSubscriber(Node):
             history=rclpy.qos.QoSHistoryPolicy.KEEP_LAST,
             depth=1
         )
+        
+        self.controlPublisher = self.create_publisher(ByteMultiArray, 'CarControl', qos_profile = qos_profile)
+        self.controlTimer = self.create_timer(0.02, self.publishData)
 
         # Create a subscriber to the desired topic
         self.subscription1 = self.create_subscription(
             ByteMultiArray,
             'CarData',
-            self.processData,
+            self.subscribeCar,
             qos_profile = qos_profile,
             raw=True
         )
@@ -28,21 +32,35 @@ class ROSTopicSubscriber(Node):
         self.subscription2 = self.create_subscription(
             ByteMultiArray,
             'CameraRGB',
-            self.processData,
+            self.subscribeCamera,
             qos_profile = qos_profile,
             raw=True
         )
         
+        self.carData = None
+        self.camData = None
+        self.controlData = None
+        
         self.last = time.perf_counter()
+        print("Init done!")
     
-    def processData(self, message):
-        print("Received msg type: ", type(Deserializer.deserialize_message(message)),". Time since last msg: ", (time.perf_counter() - self.last)*1000, " ms")
+    def subscribeCar(self, message):
         self.last = time.perf_counter()
+        self.carData = Deserializer.deserialize_message(message)
+        
+    def subscribeCamera(self, message):
+        self.camData = Deserializer.deserialize_message(message)
+        
+    def publishData(self):
+        if self.carData is not None:
+            self.controlData = (0.2, 0.1, self.carData["timeStamp"])
+            data = pickle.dumps(self.controlData, protocol = pickle.DEFAULT_PROTOCOL)
+            self.controlPublisher.publish(data)
 
-def main():
+def __main__():
     rclpy.init()
     node = ROSTopicSubscriber()
     rclpy.spin(node)
     rclpy.shutdown()
 
-main()
+__main__()

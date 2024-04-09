@@ -1,5 +1,13 @@
 import pickle
 
+def serialize_message(message):
+    try:
+        message = pickle.dumps(message)
+        return message
+    except pickle.PicklingError as e:
+        print(f"Error occurred while serializing message: {e}")
+        return None
+
 def deserialize_message(message):
     try:
         message = pickle.loads(message)
