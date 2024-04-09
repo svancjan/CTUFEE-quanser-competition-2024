@@ -139,7 +139,7 @@ def __main__():
         gps=gps
         )
     
-    qcarReadout.scheduler.enterabs(time.perf_counter() + 10, 1, qcarReadout.terminate)
+    qcarReadout.scheduler.enterabs(time.perf_counter() + 50, 1, qcarReadout.terminate)
     qcarReadout.scheduler.run()
     
     print("{:<8} {:<8} {:<8} ".format('name','max','mean'))
@@ -159,18 +159,18 @@ def __main__():
 
 
 p = psutil.Process(os.getpid())
-p.nice(psutil.HIGH_PRIORITY_CLASS) # NAZDAAAAR
+p.nice(psutil.REALTIME_PRIORITY_CLASS) # NAZDAAAAR
 
 # Ensure that timer resolution is 1 ms (can be up to 16)
 #from ctypes import c_int, windll, byref
 #originalRes = c_int()
 #windll.ntdll.NtSetTimerResolution(10000, True, byref(originalRes))
     
-#__main__()
-import pstats, cProfile
-cProfile.run('__main__()','restats')
-stat = pstats.Stats('restats')
-stat.sort_stats('cumulative').print_stats(20)
+__main__()
+#import pstats, cProfile
+#cProfile.run('__main__()','restats')
+#stat = pstats.Stats('restats')
+#stat.sort_stats('cumulative').print_stats(20)
 
 # Slow down system timer again
 #windll.ntdll.NtSetTimerResolution(156250, True, byref(originalRes))
