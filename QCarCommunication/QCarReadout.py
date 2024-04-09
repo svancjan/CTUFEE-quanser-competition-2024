@@ -106,6 +106,7 @@ class QCarReadout():
             self.feedbackCounter += 1
             self.car.write(throttle=message[0], steering=message[1], LEDs=None)
             self.timeFeedback.append(time.perf_counter()-message[2])
+            #print(message[3])
             if self.conT0 is not None:
                 self.timeControl.append(time.perf_counter()-self.conT0)
             self.conT0 = time.perf_counter()
@@ -139,7 +140,7 @@ def __main__():
         gps=gps
         )
     
-    qcarReadout.scheduler.enterabs(time.perf_counter() + 50, 1, qcarReadout.terminate)
+    qcarReadout.scheduler.enterabs(time.perf_counter() + 20, 1, qcarReadout.terminate)
     qcarReadout.scheduler.run()
     
     print("{:<8} {:<8} {:<8} ".format('name','max','mean'))
@@ -159,7 +160,7 @@ def __main__():
 
 
 p = psutil.Process(os.getpid())
-p.nice(psutil.REALTIME_PRIORITY_CLASS) # NAZDAAAAR
+p.nice(psutil.HIGH_PRIORITY_CLASS) # NAZDAAAAR
 
 # Ensure that timer resolution is 1 ms (can be up to 16)
 #from ctypes import c_int, windll, byref

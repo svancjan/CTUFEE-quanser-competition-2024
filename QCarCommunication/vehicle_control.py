@@ -24,17 +24,13 @@ from hal.products.qcar import QCarEKF
 from hal.products.mats import SDCSRoadMap
 import pal.resources.images as images
 
-import QCarReadout as QCarReadout
-from win_interface.tcp_manager import TCPManager
-import yaml
-
 
 #================ Experiment Configuration ================
 # ===== Timing Parameters
 # - tf: experiment duration in seconds.
 # - startDelay: delay to give filters time to settle in seconds.
 # - controllerUpdateRate: control update rate in Hz. Shouldn't exceed 500
-tf = 30
+tf = 3
 startDelay = 1
 controllerUpdateRate = 100
 
@@ -188,23 +184,11 @@ def controlLoop():
         gps = memoryview(b'')
     #endregion
         
-    with open("tcpConfiguration.yaml", "r") as file:
-            tcpConfig = yaml.safe_load(file)
-    with open("sensorConfiguration.yaml", "r") as file:
-            sensorConfig = yaml.safe_load(file)
+
     
-    tcpManager = TCPManager(tcpConfig["ROSIP"], tcpConfig["ROSToCarPort"], tcpConfig["CarToROSPort"])
-    cameras = QCarCameras(enableFront=True, enableBack=False, enableLeft=True, enableRight=True)
-    realrense = QCarRealSense(mode=sensorConfig["RealSenseMode"])
+    cameras = QCarCameras(enableFront=False, enableBack=False, enableLeft=False, enableRight=False)
+    realrense = QCarRealSense()
     gps = QCarGPS(initialPose=initialPose)
-        
-    qcarReadout = QCarReadout.QCarReadout(
-        qcar,
-        tcp_manager=tcpManager,
-        cameras=cameras,
-        realSense=realrense,
-        gps=gps
-        )
 
     with qcar, gps:
         t0 = time.time()
@@ -217,57 +201,6 @@ def controlLoop():
             dt = t-tp
             #endregion
 
-            qcarReadout.create_packet()
-
-            #region : Read from sensors and update state estimates
-            #qcar.read() done in the qcarReadout.create_packet() function
-            if enableSteeringControl:
-                if qcarReadout.carData["isGpsAvailable"]:
-                    y_gps = np.array([
-                        gps.position[0],
-                        gps.position[1],
-                        gps.orientation[2]
-                    ])
-                    ekf.update(
-                        [qcar.motorTach, delta],
-                        dt,
-                        y_gps,
-                        qcar.gyroscope[2],
-                    )
-                else:
-                    ekf.update(
-                        [qcar.motorTach, delta],
-                        dt,
-                        None,
-                        qcar.gyroscope[2],
-                    )
-
-                x = ekf.x_hat[0,0]
-                y = ekf.x_hat[1,0]
-                th = ekf.x_hat[2,0]
-                p = ( np.array([x, y])
-                    + np.array([np.cos(th), np.sin(th)]) * 0.2)
-            v = qcar.motorTach
-            #endregion
-
-            #region : Update controllers and write to car
-            if t < startDelay:
-                u = 0
-                delta = 0
-            else:
-                #region : Speed controller update
-                u = speedController.update(v, v_ref, dt)
-                #endregion
-
-                #region : Steering controller update
-                if enableSteeringControl:
-                    delta = steeringController.update(p, th, v)
-                else:
-                    delta = 0
-                #endregion
-
-            qcar.write(u, delta)
-            #endregion
 
             #region : Update Scopes
             count += 1
@@ -448,18 +381,6 @@ if __name__ == '__main__':
     #endregion
 
     #region : Setup control thread, then run experiment
-    controlThread = Thread(target=controlLoop)
-    controlThread.start()
-
-    try:
-        while controlThread.is_alive() and (not KILL_THREAD):
-            MultiScope.refreshAll()
-            time.sleep(0.01)
-    finally:
-        KILL_THREAD = True
-    #endregion
-    if not IS_PHYSICAL_QCAR:
-        qlabs_setup.terminate()
 
     input('Experiment complete. Press any key to exit...')
 #endregion
