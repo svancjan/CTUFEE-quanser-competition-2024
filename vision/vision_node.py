@@ -3,7 +3,7 @@ from rclpy.node import Node
 from std_msgs.msg import ByteMultiArray
 import time
 import sys
-import markers_detection as md
+import distance_computation as dc
 import pickle
 
 def serialize_message(message):
@@ -44,15 +44,28 @@ class vision_node(Node):
     def processData(self, message):
         # needs to get image[0] becaise it returns tunple (image, timestamp)
         image = deserialize_message(message)[0]
-        print("Received msg type: ", type(image))
+        stop_detected = False
+        traffic_detected = False
 
         # if data are image do this:
+        bb_stop = dc.detect_stop_sign(image)
+        bb_traffic = dc.detect_traffic_lights(image)
 
-        bb_stop = md.detect_stop_sign(image)
-        bb_traffic = md.detect_traffic_lights(image)
-
+        if bb_stop is not None:
+            stop_detected = True
+            # if stop sign detected, get distance
+            x, y, w, h, area = bb_stop
+            stop_distance = dc.estimate_distance_y2(x, y, x+w, y+h, image,1)
+        
+        if bb_traffic is not None:
+            traffic_detected = True
+            # if traffic light detected, get distance
+            bb, state = bb_traffic
+            x, y, w, h, area = bb
+            traffic_distance = dc.estimate_distance_y2(x, y, x+w, y+h, image,0)
+        
         # serialize data and publish them
-        msg = serialize_message((bb_stop, bb_traffic))
+        msg = serialize_message((stop_detected,traffic_detected,stop_distance, traffic_distance))
         self.vision_publisher.publish(msg)
         
 
