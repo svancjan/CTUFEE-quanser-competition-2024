@@ -85,7 +85,7 @@ def make_treshold(image, treshold):
     black_map[red_treshold & green_treshold & blue_treshold] = 1
     return black_map
 
-def detect_road(img, M, distance_treshold = 0.6):
+def detect_road(img, M, distance_treshold = 0.45):
     '''
     Finds a line between the road and the white background in the image.
     inputs:
@@ -170,12 +170,13 @@ def detect_road(img, M, distance_treshold = 0.6):
 
     return pts_in_car_coords
 
-def detect_yellow_line(img,M, distance_treshold = 0.6):
+def detect_yellow_line(img, M, distance_treshold = 0.45):
     '''
     Finds a line best fitting the yellow line in the image.
     inputs:
         image: numpy array <-- rgb image
         M: numpy array <-- 3x3 array, homography matrix
+        distance_treshold: float <-- treshold for the distance from the top of the image that I dont use for detection
     outputs:
         best_line: numpy array <-- 4x1 array, where first two elements are the direction of the line and the last two elements are a point on the line
     '''

@@ -49,10 +49,12 @@ class vision_node(Node):
         detects stop signs and traffic lights, side of the road and yelllow line. It then publishes the data
         to the LongitudinalPlanning and TransversePlanning topics.
 
-        Longitudinal Planning publisher data: (stop_distance, traffic_distance)
+        Longitudinal Planning publisher data: (stop_distance, traffic_distance, traffic_state)
             if stop sign not detetcted, stop_distance = None
             if traffic light not detected, traffic_distance = None
             if detected distances is of type float
+            traffic_state: int <-- state of the traffic light, 0 for red, 1 for green, 2 for yellow/unknown
+
 
         Transverse Planning publisher data: (road_line, yellow_line)
             if road line not detected, road_line = None
@@ -78,14 +80,15 @@ class vision_node(Node):
         
         if bb_traffic is not None:
             # if traffic light detected, get distance
-            bb, state = bb_traffic
+            bb, traffic_state = bb_traffic
             x, y, w, h, area = bb
             traffic_distance = np.mean(md.estimate_distance_y2(x, y, x+w, y+h, image,0))
         else:
             traffic_distance = None
+            traffic_state = None
         
         # serialize data and publish them
-        msg = serialize_message((stop_distance, traffic_distance))
+        msg = serialize_message((stop_distance, traffic_distance, traffic_state))
         self.long_planning_pub.publish(msg)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Transverse Planning ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
