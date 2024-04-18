@@ -85,7 +85,7 @@ def make_treshold(image, treshold):
     black_map[red_treshold & green_treshold & blue_treshold] = 1
     return black_map
 
-def detect_road(img, M, distance_treshold = 0.45):
+def detect_road(img, M, distance_treshold = 0.6):
     '''
     Finds a line between the road and the white background in the image.
     inputs:
@@ -123,6 +123,8 @@ def detect_road(img, M, distance_treshold = 0.45):
 
 
     contours, _ = cv2.findContours(sign_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if len(contours) == 0:
+        return None
     convex_hull = cv2.convexHull(contours[0])
     cv2.drawContours(sign_img, [convex_hull], -1, 1, 2)
     
@@ -165,18 +167,19 @@ def detect_road(img, M, distance_treshold = 0.45):
     points = np.array(np.where(labeled_image == rightmost_component_label)).T
 
     points = points[:, ::-1]
+    if len(points) < 5:
+        return None
 
     pts_in_car_coords = make_car_coords(points, M)
 
     return pts_in_car_coords
 
-def detect_yellow_line(img, M, distance_treshold = 0.45):
+def detect_yellow_line(img,M, distance_treshold = 0.6):
     '''
     Finds a line best fitting the yellow line in the image.
     inputs:
         image: numpy array <-- rgb image
         M: numpy array <-- 3x3 array, homography matrix
-        distance_treshold: float <-- treshold for the distance from the top of the image that I dont use for detection
     outputs:
         best_line: numpy array <-- 4x1 array, where first two elements are the direction of the line and the last two elements are a point on the line
     '''
@@ -205,6 +208,8 @@ def detect_yellow_line(img, M, distance_treshold = 0.45):
 
     # fix irregulaities in the shape of the line
     contours = cv2.findContours(sign_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[0]
+    if len(contours) == 0:
+        return None
     convex_hull = cv2.convexHull(contours[0])
     cv2.drawContours(sign_img, [convex_hull], -1, 1, 2)
 
@@ -244,6 +249,8 @@ def detect_yellow_line(img, M, distance_treshold = 0.45):
     points = np.array(np.where(labeled_image == rightmost_component_label)).T
 
     points = points[:, ::-1]
+    if len(points) < 5:
+        return None
 
     pts_in_car_coords = make_car_coords(points, M)
 
@@ -432,7 +439,7 @@ def estimate_distance_y2(xmin, ymin, xmax, ymax, image,flag):
     return distance_to_camera_x,distance_to_camera_y
 
 if __name__ == "__main__":
-    path = ".\\images\\auto_traffic24.jpg"
+    path = ".\\images\\edge1.png"
     with open('RS_road_h.json', 'r') as f:
         M = np.array(json.load(f))
     image = cv2.imread(path)
@@ -491,6 +498,7 @@ if __name__ == "__main__":
         plt.subplot(1,2,2)
 
     if road_line is not None:
+        print("road line shape", road_line.shape)
         # draw road line
         plt.scatter(road_line[:, 0], road_line[:, 1], color="black")
     else:
@@ -504,10 +512,10 @@ if __name__ == "__main__":
     
     if bb_stop is not None:
         # draw large red dot
-        plt.scatter(0, np.mean(stop_distance), color="red",s=400)
+        plt.scatter(0, np.mean(stop_distance), marker="h", color="red",s=300)
     if bb_semafor is not None:
         # draw large yellow dot
-        plt.scatter(0, np.mean(traffic_distance), color="brown",s=400)
+        plt.scatter(0, np.mean(traffic_distance), marker="s", color="green",s=300)
     
     plt.legend(["Road line", "Yellow line", "Stop sign", "Traffic light"])
 
