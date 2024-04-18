@@ -6,7 +6,7 @@ class TCPPublisher:
 
         self.out_sock = self.context_pub.socket(zmq.PUB)
         self.out_sock.bind("".join(("tcp://*:", str(port))))
-        self.out_sock.setsockopt(zmq.SNDHWM,1)
+        self.out_sock.setsockopt(zmq.SNDHWM,2)
         self.out_sock.setsockopt(zmq.CONFLATE,1)
 
     def terminate(self):
