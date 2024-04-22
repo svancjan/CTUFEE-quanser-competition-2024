@@ -24,7 +24,7 @@ class LongController:
     
     def update(self, v, v_ref, dt, stopsign, trafficlight, distance, state):
         #red is 0
-        if (trafficlight is not None) and (state = 0):
+        if (trafficlight is not None) and (state == 0):
 
             if (distance < 1.9):
                 v_ref = 0
