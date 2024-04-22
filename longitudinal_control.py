@@ -1,7 +1,7 @@
 class LongController:
     def __init__(self, kp, ki, kd):
         
-        self.pid = PIDController(kp, ki, kd)
+        self.pid = PIDController(kp = 1, ki = 0.1, kd)
         self.L1 = 5.34
         self.L2 = 15.2
         self.S1 = 6.84
