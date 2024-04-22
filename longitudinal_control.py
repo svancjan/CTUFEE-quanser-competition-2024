@@ -1,3 +1,5 @@
+import numpy as np
+
 class LongController:
     def __init__(self, kp, ki, kd):
         
@@ -21,15 +23,77 @@ class LongController:
         self.stop_distance = 0.1 #with control
         self.deadzone = 0.15
         self.switch_speed = 0.0
+        self.last_stop_position = None
+        self.stopsigns = None
+        self.stopsigns_stoped = None
+        self.traflights = None
     
-    def update(self, v, v_ref, dt, stopsign, trafficlight, distance, state):
-        #red is 0
-        if (trafficlight is not None) and (state == 0):
+    def update(self, v, v_ref, dt, stopsign, trafficlight, distance, state, pos):
 
-            if (distance < 1.9):
+        pos = np.array([pos[0], pos[1]])
+
+        if self.stopsigns is None:
+            self.stopsigns = np.empty((2,0))
+            self.stopsigns_stoped = np.empty((1,0))
+            self.stopsigns = np.append(self.stopsigns, stopsign)
+            self.stopsigns_stoped = np.append(self.stopsigns_stoped, False)
+        else:
+            stopsignsVect = self.stopsigns - stopsign
+            distance = np.linalg.norm(stopsignsVect)
+            if np.min(distance) < 0.3:
+                print("stop sign already in list")
+            else:
+                self.stopsigns = np.append(self.stopsigns, stopsign) 
+                self.stopsigns_stoped = np.append(self.stopsigns_stoped, False)
+
+        car_to_stop = np.linalg.norm(self.stopsigns - pos)
+        car_to_stop = np.min(car_to_stop)
+        stop_arg = np.argmin(car_to_stop)
+
+        if (car_to_stop < 0.1) and (self.stopsigns_stoped[stop_arg] == False):
+            v_ref = 0
+            if v == 0:
+                self.time_slept += dt
+                if self.time_slept > 3:
+                    self.stopsigns_stoped[stop_arg] = True
+                    self.time_slept = 0
+
+        if self.traflights is None:
+            self.traflights = np.empty((2,0))
+            self.traflights = np.append(self.traflights, trafficlight)
+        else:
+            trafficlightsVect = self.traflights - trafficlight
+            distance = np.linalg.norm(trafficlightsVect)
+            if np.min(distance) < 0.3:
+                print("traffic light already in list")
+            else:
+                self.traflights = np.append(self.traflights, trafficlight)
+
+        car_to_traffic = np.linalg.norm(self.traflights - pos)
+        car_to_traffic = np.min(car_to_traffic)
+
+        if car_to_traffic < 0 and state == 0:
+            v_ref = 0
+
+        """
+        if (trafficlight is not None) and (distance < 1.9):
+            if self.stop_trafic1 is False:
                 v_ref = 0
+                if v == 0:
+                    self.time_slept += dt
+                    if self.time_slept > 0.3:
+                        self.stop_trafic1 = True
+                        self.time_slept = 0
+            elif self.stop_trafic2 is False:
+                v_ref = 0
+                if v == 0:
+                    self.time_slept += dt
+                    if self.time_slept > 0.3:
+                        self.stop_trafic2 = True
+                        self.time_slept = 0
+        
+        if (stopsign is not None) and (distance < 0.1):
 
-        if (stopsign is not None) and (distance < 0.4):
             if self.stop_done1 is False:
                 v_ref = 0
                 if v == 0:
@@ -44,7 +108,7 @@ class LongController:
                     if self.time_slept > 3:
                         self.stop_done2 = True
                         self.time_slept = 0
-        
+        """
         
 
         if self.switch_speed < v_ref:
