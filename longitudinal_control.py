@@ -1,7 +1,7 @@
 class LongController:
     def __init__(self, kp, ki, kd):
         
-        self.pid = PIDController(kp = 1, ki = 0.1, kd = 0.0)
+        self.pid = PIDController(kp, ki, kd)
         self.L1 = 5.34
         self.L2 = 15.2
         self.S1 = 6.84
@@ -10,6 +10,8 @@ class LongController:
         self.x = 0
         self.v = 0
         self.v_ref = 0
+        self.stop_trafic1 = False
+        self.stop_trafic2 = False
         self.stop_done1 = False
         self.stop_done2 = False
         self.u_last = 0
@@ -20,7 +22,40 @@ class LongController:
         self.deadzone = 0.15
         self.switch_speed = 0.0
     
-    def update(self, v, v_ref, dt):
+    def update(self, v, v_ref, dt, stopsign, trafficlight, distance):
+        if (trafficlight is not None) and (distance < 1.9):
+            if self.stop_trafic1 is False:
+                v_ref = 0
+                if v == 0:
+                    self.time_slept += dt
+                    if self.time_slept > 0.3:
+                        self.stop_trafic1 = True
+                        self.time_slept = 0
+            elif self.stop_trafic2 is False:
+                v_ref = 0
+                if v == 0:
+                    self.time_slept += dt
+                    if self.time_slept > 0.3:
+                        self.stop_trafic2 = True
+                        self.time_slept = 0
+
+        if (stopsign is not None) and (distance < 0.4):
+            if self.stop_done1 is False:
+                v_ref = 0
+                if v == 0:
+                    self.time_slept += dt
+                    if self.time_slept > 3:
+                        self.stop_done1 = True
+                        self.time_slept = 0
+            elif self.stop_done2 is False:
+                v_ref = 0
+                if v == 0:
+                    self.time_slept += dt
+                    if self.time_slept > 3:
+                        self.stop_done2 = True
+                        self.time_slept = 0
+        
+        
 
         if self.switch_speed < self.v_ref:
             out = self.pid.update(v, v_ref, dt)  # Turn ON the GAZU by PID
