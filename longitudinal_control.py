@@ -57,9 +57,9 @@ class LongController:
         
         
 
-        if self.switch_speed < self.v_ref:
+        if self.switch_speed < v_ref:
             out = self.pid.update(v, v_ref, dt)  # Turn ON the GAZU by PID
-        elif self.switch_speed >= self.v_ref : # Use Bang BAng to stop the car
+        elif self.switch_speed >= v_ref : # Use Bang BAng to stop the car
             e = v
             if e < - self.deadzone:
                 out = 0
