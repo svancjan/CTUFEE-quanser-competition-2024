@@ -22,22 +22,12 @@ class LongController:
         self.deadzone = 0.15
         self.switch_speed = 0.0
     
-    def update(self, v, v_ref, dt, stopsign, trafficlight, distance):
-        if (trafficlight is not None) and (distance < 1.9):
-            if self.stop_trafic1 is False:
+    def update(self, v, v_ref, dt, stopsign, trafficlight, distance, state):
+        #red is 0
+        if (trafficlight is not None) and (state = 0):
+
+            if (distance < 1.9):
                 v_ref = 0
-                if v == 0:
-                    self.time_slept += dt
-                    if self.time_slept > 0.3:
-                        self.stop_trafic1 = True
-                        self.time_slept = 0
-            elif self.stop_trafic2 is False:
-                v_ref = 0
-                if v == 0:
-                    self.time_slept += dt
-                    if self.time_slept > 0.3:
-                        self.stop_trafic2 = True
-                        self.time_slept = 0
 
         if (stopsign is not None) and (distance < 0.4):
             if self.stop_done1 is False:
