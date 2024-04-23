@@ -4,6 +4,7 @@ from std_msgs.msg import ByteMultiArray
 import numpy as np
 import markers_detection as md
 import pickle
+import json
 
 def serialize_message(message):
     try:
@@ -42,6 +43,8 @@ class vision_node(Node):
             qos_profile = qos_profile,
             raw=True
         )
+        with open('RS_road_h.json', 'r') as f:
+            self.H_real_sense = np.array(json.load(f))
 
     def processData(self, message):
         '''
@@ -93,8 +96,8 @@ class vision_node(Node):
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Transverse Planning ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         
-        yellow_line = md.detect_yellow_line(image)
-        road_line = md.detect_road(image)
+        yellow_line = md.detect_yellow_line(image, self.H_real_sense)
+        road_line = md.detect_road(image, self.H_real_sense)
 
         msg = serialize_message((road_line,yellow_line))
         self.trans_planning_pub.publish(msg)
