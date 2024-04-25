@@ -384,46 +384,25 @@ def detect_traffic_lights(image):
 
     return output
 
-def estimate_distance_y2(xmin, ymin, xmax, ymax, image,flag):
+def estimate_distance(xmin, ymin, xmax, ymax, image,flag):
     
-    # Camera intrinsic matrix
-    # focal_length_x = 318.86 #CSI front 
-    # principal_point_x = 401.34 #CSI front 
-    # focal_length_y = 312.14 #CSI front 
-    # principal_point_y = 201.50 #CSI front
-    
-    focal_length_x = 455.20 
-    principal_point_x = 308.53
-    focal_length_y = 459.49
-    principal_point_y = 213.55
-    
-    # focal_length_x = 481.06 
-    # principal_point_x = 320.36
-    # focal_length_y = 479.76
-    # principal_point_y = 235.64
+    focal_length_x = 481.1 
+    principal_point_x = 321.92
+    focal_length_y = 481.16
+    principal_point_y = 236.49
     
     K = np.array([[focal_length_x, 0, principal_point_x],
                   [0, focal_length_y, principal_point_y],
                   [0, 0, 1]])
 
     # Distortion coefficients
-    #dist_coeffs = np.array([-0.9033, 1.5314, -0.0173, 0.0080, -1.1659])  #CSI front 
-    dist_coeffs = np.array([-0.05114, 5.4549 , -0.0226 , -0.0062, -20.190])
+    dist_coeffs = np.array([-0.01287396 , 0.16592393, -0.00157848 , 0.00121273, -0.38614947])
 
-    # Pixel coordinates of bounding box
-    bbox_pixel_coords = [xmin, ymin, xmax, ymax]
-
-    # Undistort image
-    undistorted_image = cv2.undistort(image, K, dist_coeffs)
-
-    # Calculate pixel coordinates of bounding box
-    xmin_ud, ymin_ud, xmax_ud, ymax_ud = bbox_pixel_coords
     
     # Convert to normalized image coordinates
-    bbox_normalized_coords = [(xmin_ud / undistorted_image.shape[1], ymin_ud / undistorted_image.shape[0]),
-                              (xmax_ud / undistorted_image.shape[1], ymax_ud / undistorted_image.shape[0])]
+    bbox_normalized_coords = [(xmin / image.shape[1], ymin / image.shape[0]),
+                              (xmax / image.shape[1], ymax / image.shape[0])]
     if flag == 0: # traffic light
-        #real_width = 0.075 # 7.5cm ve zmensenem svete 10*, tedy 75cm ve svete 1:1
         real_width = 0.0775 # 7.75dm
         real_height = 0.161 # 0.16183m in real world 16,083 dm
     elif flag == 1: # stop sign
@@ -431,8 +410,8 @@ def estimate_distance_y2(xmin, ymin, xmax, ymax, image,flag):
         real_height = 0.065 #
     else:
         print("Detected object cannot be recognised")
-    distance_to_camera_x = (real_width * focal_length_x)/ (abs(xmax_ud-xmin_ud))
-    distance_to_camera_y = (real_height * focal_length_y)/ (abs(ymax_ud-ymin_ud))
+    distance_to_camera_x = (real_width * focal_length_x)/ (abs(xmax-xmin))
+    distance_to_camera_y = (real_height * focal_length_y)/ (abs(ymax-ymin))
     print("Computed distance in x direction:",distance_to_camera_x)
     print("Computed distance in y direction:",distance_to_camera_y)
     print("\n")
@@ -464,7 +443,7 @@ if __name__ == "__main__":
     if bb_stop is not None:
         x,y,w,h, area = bb_stop
         cv2.rectangle(image, (x, y), (x+w, y+h), (10, 10, 255), 2)
-        stop_distance = estimate_distance_y2(x, y, x+w, y+h, image,1)
+        stop_distance = estimate_distance(x, y, x+w, y+h, image,1)
         print("The estimated distance to stop sign is: ",stop_distance)
     else:
         print("No stop sign detected")
@@ -483,7 +462,7 @@ if __name__ == "__main__":
         else:
             print("Unknown")
             cv2.putText(image, "Unknown", (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (10, 10, 255), 2)
-        traffic_distance = estimate_distance_y2(x, y, x+w, y+h, image,0)
+        traffic_distance = estimate_distance(x, y, x+w, y+h, image,0)
         print("The estimated distance to traffic light is: ",traffic_distance)
     else:
         print("No traffic light detected")
