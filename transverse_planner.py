@@ -3,6 +3,29 @@ import matplotlib.pyplot as plt
 
 CAR_WIDTH = 0.21
 
+
+def offset_curve_mine(points, distance):
+    """
+    points are np.array of x,y of curve to be ofset
+
+    distance is distance to be offseted by
+    """
+    
+    # Create a LineString from the points
+    line = LineString(points)
+
+    # Offset the LineString
+    offset_line = line.parallel_offset(distance, 'left',  join_style='round')
+
+    offset_line = np.array(offset_line.coords)
+    print("offset_line:", type(offset_line))
+
+
+
+    # Return the coordinates of the offset curve as a numpy array
+    return offset_line
+
+
 def get_center_line(lines:tuple[np.ndarray | None, np.ndarray | None]) -> np.ndarray | None:
     index = None
     two_lines = True
