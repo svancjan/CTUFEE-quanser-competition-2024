@@ -77,7 +77,7 @@ class vision_node(Node):
         if bb_stop is not None:
             # if stop sign detected, get distance
             x, y, w, h, area = bb_stop
-            stop_distance = np.mean(md.estimate_distance_y2(x, y, x+w, y+h, image,1))
+            stop_distance = np.mean(md.estimate_distance(x, y, x+w, y+h, image,1))
         else:
             stop_distance = None
         
@@ -85,7 +85,7 @@ class vision_node(Node):
             # if traffic light detected, get distance
             bb, traffic_state = bb_traffic
             x, y, w, h, area = bb
-            traffic_distance = np.mean(md.estimate_distance_y2(x, y, x+w, y+h, image,0))
+            traffic_distance = np.mean(md.estimate_distance(x, y, x+w, y+h, image,0))
         else:
             traffic_distance = None
             traffic_state = None

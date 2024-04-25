@@ -85,12 +85,11 @@ class yolo_node(Node):
             mask = mask[0, :, :]
             # 
             contours, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            centers = []
             contour = contours[0]
             M = cv2.moments(contour)
             cx = int(M['m10']/M['m00'])
             cy = int(M['m01']/M['m00'])
-            point = [cx,cy]
+            point = np.array([cx,cy]).reshape(1,2)
             # for contour in contours:
             #     M = cv2.moments(contour)
             #     if M["m00"] != 0:
