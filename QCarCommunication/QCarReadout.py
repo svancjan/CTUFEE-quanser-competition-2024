@@ -1,152 +1,248 @@
-from pal.products.qcar import QCar, QCarCameras, QCarLidar, QCarRealSense, QCarGPS, IS_PHYSICAL_QCAR
-#import numpy as np
+from pal.products.qcar import QCar, QCarRealSense, QCarGPS, IS_PHYSICAL_QCAR
+from hal.products.qcar import QCarEKF
+import numpy as np
 
-from win_interface.tcp_manager import TCPManager
-import yaml
-
+from win_interface.tcp_manager import TCPPublisher, TCPSubscriber
 import time
-from sched import scheduler
 
-import psutil, os # Namrdam tam "RT" a pofrci to huhuhuhahaha
+import psutil, os
+import pickle
 
+#MY FILES
+from vehicle_model import vehicle_position
+from path_creation import global_path
+from shadow_vehicle import shadow_vehicle
+from controls import LateralController, LongController
+from ReferenceCalculation import reference_calc
+#MY FILES
+
+import cv2
 
 class QCarReadout():
-    def __init__(
-            self,
-            car : QCar,
-            tcp_manager : TCPManager,
-            cameras : QCarCameras = None,
-            lidar : QCarLidar = None,
-            realSense : QCarRealSense = None,
-            gps : QCarGPS = None,
-            ):
-        self.car = car
-        self.cameras = cameras # Camera2D obj
-        self.lidar = lidar # Lidar obj
-        self.realSense = realSense # Camera3D obj
-        self.gps = gps
+    def __init__(self):
+        self.x0 = [-1.19, -0.82, -0.7187]
         
-        self.isExit = False
-
+        self.car = QCar(readMode=1, frequency=100)
+        self.realsense = QCarRealSense(mode='RGB')
+        self.gps = QCarGPS(self.x0)
+        self.ekf = QCarEKF(self.x0)
+        self.tcpPublisher = TCPPublisher(5556)
+        self.tcpSubscriberLines = TCPSubscriber("169.254.165.100", 5555)
+        self.tcpSubscriberTrafficSigns = TCPSubscriber("169.254.165.100", 5554)
+        
         self.carData = dict()
-        
         self.cameraData = tuple()
         
-        self.tcp_manager = tcp_manager
-
-        with open("sensorConfiguration.yaml", "r") as file:
-            self.sensorConfig = yaml.safe_load(file)
-            
-        self.scheduler = scheduler(time.perf_counter, time.sleep)
-        self.Tcar = 0.005
-        self.Tcamera = 0.020
-        self.Tcontrol = 0.005
+        self.gyroData = None
+        self.throttle = 0
+        self.delta = 0
         
+        self.linesData = None
+        self.trafficData = None
+            
+        self.Tcar = 0.0075
+        self.Tcamera = 0.04
+        
+        self.carCounter = 0
+        self.feedbackCounter = 0
+        
+        # DEBUG begin
         self.timeCar = list()
         self.timeCamera = list()
         self.timeControl = list()
         self.timeFeedback = list()
+        self.timeEkf = list()
         
         self.carT0 = None
         self.camT0 = None
         self.conT0 = None
+        # DEBUG end
         
-        self.camSchedHandle = self.scheduler.enterabs(time.perf_counter() + self.Tcamera, 3, self.readRGBCamera)
-        self.carSchedHandle = self.scheduler.enterabs(time.perf_counter() + self.Tcar, 2, self.readCar)
-        self.controlSchedHandle = self.scheduler.enterabs(time.perf_counter() + self.Tcontrol, 1, self.pushControl)
+        self.startDelay = 1.5 # s 
+        #self.estimatedDelta = 0
         
-        self.carCounter = 0
-        self.feedbackCounter = 0
-
-    def terminate(self):
-        self.scheduler.cancel(self.camSchedHandle)
-        self.scheduler.cancel(self.carSchedHandle)
-        self.scheduler.cancel(self.controlSchedHandle)
-        self.tcp_manager.terminate()
-
-    def readCar(self):
-        self.carSchedHandle = self.scheduler.enterabs(time.perf_counter() + self.Tcar, 2, self.readCar)
+        print("Initialization done!")
+        self.tStart = time.perf_counter()
+        #MYFILES
+        # initial setup
+        print('Starting control setup')
+        self.reference = reference_calc('QPath.npy',-1.1934, -0.8220, -0.7187)
+        self.LatController = LateralController(0,0,0,1)
+        self.LongController = LongController(1,0.1,0)
+        self.flag_init = True
+        self.flag_HA = True
+        self.flag_finish = True
+        self.TCPenable = False
+        self.TCPtime = None
+        self.StopSignEstimate = None
+        self.StopSignTime = None
+        self.endTime = None
+        self.p = np.array([self.x0[0], self.x0[1], self.x0[2]]) + np.array([np.cos(self.x0[2]), np.sin(self.x0[2]), 0]) * 0.2
+        #MYFILES'
+        
+    def calcEkf(self, yawRate, timeDiff):
+        isNewGps = self.gps.readGPS()
+        
+        if(time.perf_counter() - self.tStart > 1.2):
+            self.estimatedDelta = self.estimatedDelta + (timeDiff)*(-6.25*self.estimatedDelta + 6.25*self.delta)
+        else:
+            self.estimatedDelta = self.delta
+        
+        if isNewGps:
+            y_gps = np.array([
+                self.gps.position[0],
+                self.gps.position[1],
+                self.gps.orientation[2]
+            ])
+            self.ekf.update(
+                [self.car.motorTach, self.estimatedDelta],
+                timeDiff,
+                y_gps,
+                yawRate,
+            )
+        else:
+            self.ekf.update(
+                [self.car.motorTach, self.estimatedDelta],
+                timeDiff,
+                None,
+                yawRate,
+            )
+        
+    def readCar(self,timeDiff):
         self.car.read()
-        self.carData["timeStamp"] = time.perf_counter()
-        self.carData["motorCurrent"] = self.car.motorCurrent # np.zeros(2, dtype=np.float64)
-        self.carData["batteryVoltage"] = self.car.batteryVoltage # np.zeros(2, dtype=np.float64)
-        self.carData["motorEncoder"] = self.car.motorEncoder # np.zeros(1, dtype=np.int32)
-        self.carData["motorTach"] = self.car.motorTach # np.zeros(1, dtype=np.float64)
-        self.carData["accelerometer"] = self.car.accelerometer # np.zeros(3, dtype=np.float64) # x,y,z
-        self.carData["gyroscope"] = self.car.gyroscope # np.zeros(3, dtype=np.float64) # x,y,z
-        if (self.gps is not None):
-            self.carData["isGpsAvailable"] = self.gps.readGPS()
-            self.carData["gpsPosition"] = self.gps.position # np.zeros((3)) # position x, position y, position z (z is 0)
-            self.carData["gpsOrientation"] = self.gps.orientation # np.zeros((3)) # roll, pitch, yaw
-            
-            self.carData["isLidarAvailable"] = self.gps.readLidar()
-            self.carData["lidarDistances"] = self.gps.distances # np.zeros((360)) # distances
-            self.carData["lidarAngles"] = self.gps.angles # np.zeros((360)) # angles
-        self.tcp_manager.send_msg(self.carData)
+        self.calcEkf(self.car.gyroscope[2], timeDiff)
+        #self.carData["kalmanFilter"] = np.array(
+        #    [self.ekf.x_hat[0,0], self.ekf.x_hat[1,0], self.ekf.x_hat[2,0]])# x, y, theta
+        
+        # DEBUG begin
         self.carCounter += 1
         if self.carT0 is not None:
             self.timeCar.append(time.perf_counter()-self.carT0)
         self.carT0 = time.perf_counter()
-
+        # DEBUG end
+        
     def readRGBCamera(self):
         t0 = time.perf_counter()
-        self.camSchedHandle = self.scheduler.enterabs(t0 + self.Tcamera, 3, self.readRGBCamera)
-        self.cameras.readAll()
-        if (self.cameras.csiFront is not None):
-            self.cameraData = (self.cameras.csiFront.imageData, t0)
-            self.tcp_manager.send_msg(self.cameraData)
+        self.realsense.read_RGB()
+        if (self.realsense.imageBufferRGB is not None):
+            if(self.TCPtime is not None and self.flag_finish):
+                self.cameraData = (self.realsense.imageBufferRGB, self.p, time.perf_counter()-self.TCPtime)
+            elif(self.TCPtime is not None):
+                self.cameraData = (self.realsense.imageBufferRGB, self.p, self.endTime)
+            else:
+                self.cameraData = (self.realsense.imageBufferRGB, self.p, 0)
+            self.tcpPublisher.send_msg(pickle.dumps(self.cameraData, protocol=pickle.DEFAULT_PROTOCOL))
+            # DEBUG begin
+            #cv2.imwrite("drive\\" + str(round((time.perf_counter()-self.tStart)*1000)) + ".jpg", self.cameraData[0])
+            #cv2.imshow('RGB', self.cameraData[0])
+            #cv2.waitKey(1)
             if self.camT0 is not None:
                 self.timeCamera.append(time.perf_counter()-self.camT0)
             self.camT0 = time.perf_counter()
+            # DEBUG end
+            
+    def receiveLines(self):
+        msg = self.tcpSubscriberLines.receive_msg()
+        if (msg is not None):
+            self.TCPenable = True
+            self.linesData = pickle.loads(msg)
+        
+    def receiveTrafficSigns(self):
+        msg = self.tcpSubscriberTrafficSigns.receive_msg()
+        if (msg is not None):
+            self.trafficData = pickle.loads(msg)
+            
+    def pushControl(self,timeDiff):
+        # Wait for TCP
+        if(self.TCPenable):
+            self.p = np.array([self.ekf.x_hat[0,0], self.ekf.x_hat[1,0], self.ekf.x_hat[2,0]]) + np.array([np.cos(self.ekf.x_hat[2,0]), np.sin(self.ekf.x_hat[2,0]), 0]) * 0.2
 
-    def pushControl(self):
-        self.controlSchedHandle = self.scheduler.enterabs(time.perf_counter() + self.Tcontrol, 1, self.pushControl)
-        message = self.tcp_manager.receive_msg(0) # u, delta
-        if (message is not None):
-            self.feedbackCounter += 1
-            self.car.write(throttle=message[0], steering=message[1], LEDs=None)
-            self.timeFeedback.append(time.perf_counter()-message[2])
-            #print(message[3])
-            if self.conT0 is not None:
-                self.timeControl.append(time.perf_counter()-self.conT0)
-            self.conT0 = time.perf_counter()
+            v = self.car.motorTach
+            #print('     velocity:',v)
+            #print('-----------velocityy',v)
+            LA_coef = int(18*min(1,v))
+            ref = self.reference.update(self.p[0],self.p[1],self.ekf.x_hat[2,0],v,LA_coef)
+            
+            # controller update
+            if(self.flag_HA): #print only
+                self.TCPtime = time.perf_counter()
+                print('HA starting')
+                self.flag_HA = False
+            if(time.perf_counter()-self.TCPtime>1):
+                
+                #v ref calculation
+                v_ref = ref[0]
+                if(v_ref>3):
+                    v_ref = 2.8 #for debugging
+                
+                self.delta = self.LatController.deltaCalc(ref[1],ref[2],ref[3],self.car.gyroscope[2],v)
+                                
+                # Check if car is in the finish line
+                if(np.linalg.norm(self.p[:2]-np.array([-1.984125,0.47703]))<0.5 and v<0.1):
+                    if(self.flag_finish):
+                        print('finish')
+                        self.flag_finish = False
+                        print('total time:',time.perf_counter()-self.TCPtime)
+                        self.endTime = time.perf_counter()-self.TCPtime
+                        exit()
+                        
+            # Initial control
+            #else:
+            #    if(self.flag_init):
+            #        print('controls init')
+            #        self.flag_init = False
+            #    v_ref = 0.7
+            #    self.delta = 0.25 #update(self, v, v_ref, dt, stopsign, trafficlight, state):
+                #print('position:',self.p)
+                self.throttle = self.LongController.update(v, v_ref, timeDiff, self.trafficData[0], self.trafficData[1] , self.trafficData[2], self.p, self.flag_finish)
+        else:
+            self.delta = 0
+            self.throttle = 0
+        self.car.write(throttle=self.throttle, steering=self.delta, LEDs=None)
 
 def __main__():
+    p = psutil.Process(os.getpid())
+    p.nice(psutil.REALTIME_PRIORITY_CLASS)
     
-    with open("tcpConfiguration.yaml", "r") as file:
-            tcpConfig = yaml.safe_load(file)
-    with open("sensorConfiguration.yaml", "r") as file:
-            sensorConfig = yaml.safe_load(file)
+    # Ensure that timer resolution is 1 ms (can be up to 16)
+    #from ctypes import c_int, windll, byref
+    #originalRes = c_int()
+    #windll.ntdll.NtSetTimerResolution(10000, True, byref(originalRes))
+
+    qcarReadout = QCarReadout()
     
-    qcar = QCar(readMode=1, frequency=100)
-    tcpManager = TCPManager(tcpConfig["ROSIP"], tcpConfig["ROSToCarPort"], tcpConfig["CarToROSPort"])
-    cameras = QCarCameras(enableFront=sensorConfig["FrontUWCamEnable"],
-                          enableBack=sensorConfig["BackUWCamEnable"],
-                          enableLeft=sensorConfig["LeftUWCamEnable"],
-                          enableRight=sensorConfig["RightUWCamEnable"])
-    realrense = QCarRealSense(mode=sensorConfig["RealSenseMode"])
+    t0 = time.perf_counter()
+    t = 0
+    tp = None
+    readCarSchedule = time.perf_counter() + qcarReadout.Tcar
+    readCameraSchedule = time.perf_counter() + qcarReadout.Tcamera
+    while(time.perf_counter()-t0 < 60):
+        tp = t
+        t = time.perf_counter() - t0
+        dt = t-tp
+        #print('dt:',dt) 
+        if(time.perf_counter() > readCarSchedule):
+            readCarSchedule = time.perf_counter() + qcarReadout.Tcar
+            qcarReadout.readCar(dt)
+        if(time.perf_counter() > readCameraSchedule):
+            readCameraSchedule = time.perf_counter() + qcarReadout.Tcamera
+            qcarReadout.readRGBCamera()
+        qcarReadout.receiveLines()
+        qcarReadout.receiveTrafficSigns()
+        qcarReadout.pushControl(dt)
+    print('Simulation done!')
     
-    del sensorConfig, tcpConfig
-    import gc
-    gc.collect()
+    # Slow down system timer again
+    #windll.ntdll.NtSetTimerResolution(156250, True, byref(originalRes))
     
-    gps = QCarGPS()
-    
-    qcarReadout = QCarReadout(
-        qcar,
-        tcp_manager=tcpManager,
-        cameras=cameras,
-        realSense=realrense,
-        gps=gps
-        )
-    
-    qcarReadout.scheduler.enterabs(time.perf_counter() + 20, 1, qcarReadout.terminate)
-    qcarReadout.scheduler.run()
-    
+    # DEBUG begin
     print("{:<8} {:<8} {:<8} ".format('name','max','mean'))
     print("{:<8} {:<8} {:<8} ".format(
         "car","{:.1f}".format(max(qcarReadout.timeCar)*1000), 
           "{:.1f}".format(sum(qcarReadout.timeCar)/(len(qcarReadout.timeCar))*1000)))
+    print("{:<8} {:<8} {:<8} ".format(
+        "ekf","{:.1f}".format(max(qcarReadout.timeEkf)*1000), 
+          "{:.1f}".format(sum(qcarReadout.timeEkf)/(len(qcarReadout.timeEkf))*1000)))
     print("{:<8} {:<8} {:<8} ".format(
         "camera","{:.1f}".format(max(qcarReadout.timeCamera)*1000), 
           "{:.1f}".format(sum(qcarReadout.timeCamera)/(len(qcarReadout.timeCamera))*1000)))
@@ -157,22 +253,14 @@ def __main__():
         "feedback","{:.1f}".format(max(qcarReadout.timeFeedback)*1000), 
           "{:.1f}".format(sum(qcarReadout.timeFeedback)/(len(qcarReadout.timeFeedback))*1000)))
     print("counters:", qcarReadout.carCounter, qcarReadout.feedbackCounter)
-
-
-p = psutil.Process(os.getpid())
-p.nice(psutil.HIGH_PRIORITY_CLASS) # NAZDAAAAR
-
-# Ensure that timer resolution is 1 ms (can be up to 16)
-#from ctypes import c_int, windll, byref
-#originalRes = c_int()
-#windll.ntdll.NtSetTimerResolution(10000, True, byref(originalRes))
+    # DEBUG end
     
 __main__()
+
+
+# DEBUG begin
 #import pstats, cProfile
 #cProfile.run('__main__()','restats')
 #stat = pstats.Stats('restats')
 #stat.sort_stats('cumulative').print_stats(20)
-
-# Slow down system timer again
-#windll.ntdll.NtSetTimerResolution(156250, True, byref(originalRes))
-        
+# DEBUG end
