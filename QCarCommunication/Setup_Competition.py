@@ -79,7 +79,7 @@ hWall.spawn_degrees(location=[-1.575+ x_offset, -2.7+ y_offset, 0.001], rotation
 # Spawn a QCar at the given initial pose
 car2 = QLabsQCar(qlabs)
 car2.spawn_id_degrees(actorNumber=0, location=[-1.335+ x_offset, -2.5+ y_offset, 0.005], rotation=[0, 0, -45], scale=[.1, .1, .1], configuration=0, waitForConfirmation=True)
-#car2.spawn_id_degrees(actorNumber=0, location=[-2, 3.5, 0.005], rotation=[0, 0, -90], scale=[.1, .1, .1], configuration=0, waitForConfirmation=True)
+#car2.spawn_id_degrees(actorNumber=0, location=[-1.8,3.8, 0.005], rotation=[0, 0, -90], scale=[.1, .1, .1], configuration=0, waitForConfirmation=True)
 basicshape2 = QLabsBasicShape(qlabs)
 basicshape2.spawn_id_and_parent_with_relative_transform(actorNumber=102, location=[1.15, 0, 1.8], rotation=[0, 0, 0], scale=[.65, .65, .1], configuration=basicshape2.SHAPE_SPHERE, parentClassID=car2.ID_QCAR, parentActorNumber=2, parentComponent=1,  waitForConfirmation=True)
 basicshape2.set_material_properties(color=[0.4,0,0], roughness=0.4, metallic=True, waitForConfirmation=True)
@@ -87,19 +87,17 @@ basicshape2.set_material_properties(color=[0.4,0,0], roughness=0.4, metallic=Tru
 camera1=QLabsFreeCamera(qlabs)
 camera1.spawn_degrees (location = [-0.426+ x_offset, -5.601+ y_offset, 4.823], rotation=[0, 41, 90])
 
+
 camera2=QLabsFreeCamera(qlabs)
 #camera2.spawn_degrees (location = [-0.4+ x_offset, -4.562+ y_offset, 3.938], rotation=[0, 47, 90])
-camera2.spawn_degrees (location = [0, 1.5, 3.938], rotation=[0, 90, 90])
-
+camera2.spawn_degrees (location = [x_offset, y_offset, 6], rotation=[0, 90, 0])
 
 
 camera3=QLabsFreeCamera(qlabs)
 camera3.spawn_degrees (location = [-0.36+ x_offset, -3.691+ y_offset, 2.652], rotation=[0, 47, 90])
 
 camera2.possess()
-
-camera4=QLabsFreeCamera(qlabs)
-camera4.spawn_degrees (location = [x_offset, y_offset, 5], rotation=[0, 90, 0])
+#car2.possess()
 
 # stop signs
 myStopSign = QLabsStopSign(qlabs)
@@ -117,7 +115,8 @@ mySpline.spawn_degrees ([2.05 + x_offset, -1.5 + y_offset, 0.01], [0, 0, 0], [0.
 mySpline.spawn_degrees ([-2.075 + x_offset, y_offset, 0.01], [0, 0, 0], [0.27, 0.02, 0.001], False)
 
 # Start spawn model
-QLabsRealTime().terminate_real_time_model(rtmodels.QCAR_STUDIO)
-QLabsRealTime().start_real_time_model(rtmodels.QCAR_STUDIO)
+#QLabsRealTime().start_real_time_model(rtmodels.QCAR_STUDIO)
 
 # To terminate the spawn model use the following command:
+QLabsRealTime().terminate_real_time_model(rtmodels.QCAR_STUDIO)
+QLabsRealTime().start_real_time_model(rtmodels.QCAR_STUDIO)

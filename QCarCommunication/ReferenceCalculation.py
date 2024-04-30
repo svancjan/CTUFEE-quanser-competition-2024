@@ -47,4 +47,8 @@ class reference_calc:
         heLA = self.sv.HeadingErrLA
         v_ref = self.sv.v_ref
         return np.array([v_ref, xte, he, heLA])
+    
+    def update_path(self,LocalPath):
+        self.sv.updatePath(LocalPath)
+        
                 

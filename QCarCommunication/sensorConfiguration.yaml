@@ -1,5 +1,0 @@
-FrontUWCamEnable: True
-BackUWCamEnable: False
-LeftUWCamEnable: False
-RightUWCamEnable: False
-RealSenseMode: 'depth, RGB'

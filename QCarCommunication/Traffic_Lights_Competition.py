@@ -35,10 +35,10 @@ while (True):
 
     if i % 2 == 0:
         TrafficLight0.set_state(QLabsTrafficLight.STATE_GREEN)
-        #TrafficLight1.set_state(QLabsTrafficLight.STATE_RED)
+        TrafficLight1.set_state(QLabsTrafficLight.STATE_RED)
     else:
         TrafficLight1.set_state(QLabsTrafficLight.STATE_GREEN)
-        #TrafficLight0.set_state(QLabsTrafficLight.STATE_RED)
+        TrafficLight0.set_state(QLabsTrafficLight.STATE_RED)
 
     time.sleep(5)
 

@@ -1,6 +1,6 @@
 import numpy as np
 from vehicle_model import vehicle_position, KinematicVehicleModel
-from path_creation import global_path
+from path_creation import global_path, path
 
 
 class shadow_vehicle:
@@ -114,7 +114,7 @@ class shadow_vehicle:
 
     def headingErrCalcLA(self,vehicle,velocity,LAconst):
         self.v_pose = vehicle.position
-        LA_index = min(self.idx + int(velocity*LAconst),self.path_len-1)
+        LA_index = min(self.idx + LAconst,self.path_len-1)
         LApsi = self.path.psi[LA_index]
         error = LApsi - self.v_pose.psi
         aux_err = np.array([error, error - 2 * np.pi, error + 2 * np.pi])
@@ -130,4 +130,12 @@ class shadow_vehicle:
         e_out = error
         #print(e_out)
         self.HeadingErrLA = e_out
-
+    
+    def updatePath(self, LocalPath):
+        self.path.x = LocalPath[:,0]
+        self.path.y = LocalPath[:,1]
+        self.path.psi = LocalPath[:,2]
+        self.path.d = 0
+        self.v_refs = None
+        self.path_len = len(self.path.x)
+            
