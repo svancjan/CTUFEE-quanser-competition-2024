@@ -21,4 +21,6 @@ Our control solution is divided into two subclasses: one dedicated to longitudin
 ![HA](https://github.com/svancjan/CTUFEE-quanser-competition-2024/assets/153733241/fa12ea1c-930c-4441-afa7-bae1fed477e1)
 Figure 2:
 
-
+# How to run
+Whole program is divided into two workspaces. One has to contain Windows OS, which will run Quanser Interactive Labs and compute desired control action to the simulation. Other workspace should preferably run on Linux OS. This workspace is in ROS2 environment and handles, vision, and lateral planning.
+On both systems multiple libraries for python has to be installed. Except for standard libraries (numpy, etc.), there are others, which are present in the requirements.txt file. In the Linux machine, ROS2 environment has to be installed. After that, ROS2 has to be sourced, and built (colcon build --symlink-install). Then one has to source th elocal workspace, and run the program using prepared launch file (ros2 launch ctu_quanser_comp startup_launch.py).
