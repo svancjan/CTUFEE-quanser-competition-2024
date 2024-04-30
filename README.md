@@ -19,6 +19,7 @@ Our control solution is divided into two subclasses: one dedicated to longitudin
 Kuba dopsat já nevím
 
 
+![HA](https://github.com/svancjan/CTUFEE-quanser-competition-2024/assets/153733241/fa12ea1c-930c-4441-afa7-bae1fed477e1)
 
 
 
