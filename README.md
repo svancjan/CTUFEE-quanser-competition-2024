@@ -22,5 +22,6 @@ Our control solution is divided into two subclasses: one dedicated to longitudin
 Figure 2:
 
 # How to run
-Whole program is divided into two workspaces. One has to contain Windows OS, which will run Quanser Interactive Labs and compute desired control action to the simulation. Other workspace should preferably run on Linux OS. This workspace is in ROS2 environment and handles, vision, and lateral planning.
+Whole program is divided into two workspaces. One has to contain Windows OS, which will run Quanser Interactive Labs and compute desired control action to the simulation (shall use QCarCommunication folder, then run file QCarReadout.py). Other workspace should preferably run on Linux OS. This workspace is in ROS2 environment and handles, vision, and lateral planning (runned via ros2 launch described below).
 On both systems multiple libraries for python has to be installed. Except for standard libraries (numpy, etc.), there are others, which are present in the requirements.txt file. In the Linux machine, ROS2 environment has to be installed. After that, ROS2 has to be sourced, and built (colcon build --symlink-install). Then one has to source th elocal workspace, and run the program using prepared launch file (ros2 launch ctu_quanser_comp startup_launch.py).
+Also static IP addresses are used for the communication via local network (tested with ethernet). Static IP addresses were used, Linux machine has IP address 169.254.165.100, Windows 169.254.165.200, both netmasks are 255.255.0.0.
