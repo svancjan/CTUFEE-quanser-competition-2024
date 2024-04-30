@@ -5,6 +5,7 @@ from .tcp_manager import TCPPublisher, TCPSubscriber
 import rclpy
 from rclpy.node import Node
 
+from ..Deserializer import Deserializer
 
 import pickle
 
@@ -15,7 +16,7 @@ class QCarDataPublisher(Node):
         # Create TCPManager instance
         self.tcpPublisherLines = TCPPublisher(5555)
         self.tcpPublisherSigns = TCPPublisher(5554)
-        self.tcpPublisherTrafficLine = TCPPublisher(5553)
+        self.tcpPublisherNeuralNetwork = TCPPublisher(5553)
         self.tcpCameraSubscriber = TCPSubscriber("169.254.165.200", 5556)
         
         qos_profile = rclpy.qos.QoSProfile(
@@ -46,15 +47,15 @@ class QCarDataPublisher(Node):
             raw=True
         )
         
-        # traffic lights line
-        self.TransverseDataSub = self.create_subscription(
+        
+        self.NNDataSub = self.create_subscription(
             ByteMultiArray,
-            'TransverseData',
-            self.sendStopLine,
+            'NNData',
+            self.sendNeuralNetworkData,
             qos_profile = qos_profile,
             raw=True
         )
-
+        self.XXX = None
         self.cameraData = None
         self.get_logger().info("Simulation interface node initialization done!")
         
@@ -72,8 +73,8 @@ class QCarDataPublisher(Node):
     def sendLinesTCP(self, message):
         self.tcpPublisherLines.send_msg(message)
         
-    def sendStopLine(self, message):
-        self.tcpPublisherTrafficLine.send_msg(message)
+    def sendNeuralNetworkData(self, message):
+        self.tcpPublisherNeuralNetwork.send_msg(message)
 
 
 def __main__():

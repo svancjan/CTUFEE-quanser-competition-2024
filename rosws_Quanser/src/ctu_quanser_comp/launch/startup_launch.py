@@ -10,7 +10,7 @@ def generate_launch_description():
         ),
         Node(
             package='ctu_quanser_comp',
-            executable='vision',
+            executable='objectDetection',
             output='screen'
         ),
         Node(

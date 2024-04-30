@@ -26,8 +26,9 @@ setup(
     entry_points={
         'console_scripts': [
             'simulationInterface = ctu_quanser_comp.windowsInterface.WindowsInterface:main',
-            'vision = ctu_quanser_comp.vision.vision_node:main',
-            'lateralPlanning = ctu_quanser_comp.lateralPlanning.lateral_plan_node:main'
+            'objectDetection = ctu_quanser_comp.objectDetection.vision_node:main',
+            'lateralPlanning = ctu_quanser_comp.lateralPlanning.lateral_plan_node:main',
+            'yolo = ctu_quanser_comp.yolo.yolo_node.main'
         ],
     },
 )
