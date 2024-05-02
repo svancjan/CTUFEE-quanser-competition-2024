@@ -4,8 +4,7 @@
 
 Our solution was developed to have the best coherence of performance and robustness to fulfil the rules of the first stage of the competition. During development, we put great emphasis on the modularity of the solution to be as transferable and versatile as possible. In anticipation of the second stage of the competition, which employs a real Qcar operating on a Linux system, we have designed our software accordingly. With the intention of utilizing the ROS 2 environment during this stage, we have established a connection layer that enables the use of a Linux PC equipped with the ROS 2 environment. This strategic approach ensures our preparedness for the forthcoming challenges of the competition. To simulate the Qcar we are running the Quanser interactive labs on a Windows PC and image processing and local planning. In Figure 1 there is a simplified graph of our solution.
 
-
-![MicrosoftTeams-image](https://github.com/svancjan/CTUFEE-quanser-competition-2024/assets/161430370/22409b05-5606-40c3-9b89-9fe55b5bd2bb)
+![quanser_diagram_fix2](https://github.com/svancjan/CTUFEE-quanser-competition-2024/assets/153294405/e4d36737-5a47-422e-bd23-2b1443b6c640)
 Figure 1:
 
 As seen in Fig. 1 control algorithms are run on Windows PC along the Qcar simulation to maximize response time and minimize transport delay.  
@@ -23,5 +22,5 @@ Figure 2:
 
 # How to run
 Whole program is divided into two workspaces. One has to contain Windows OS, which will run Quanser Interactive Labs and compute desired control action to the simulation (shall use QCarCommunication folder, then run file QCarReadout.py). Other workspace should preferably run on Linux OS. This workspace is in ROS2 environment and handles, vision, and lateral planning (runned via ros2 launch described below).
-On both systems multiple libraries for python has to be installed. Except for standard libraries (numpy, etc.), there are others, which are present in the requirements.txt file. In the Linux machine, ROS2 environment has to be installed. After that, ROS2 has to be sourced, and built (colcon build --symlink-install). Then one has to source th elocal workspace, and run the program using prepared launch file (ros2 launch ctu_quanser_comp startup_launch.py).
-Also static IP addresses are used for the communication via local network (tested with ethernet). Static IP addresses were used, Linux machine has IP address 169.254.165.100, Windows 169.254.165.200, both netmasks are 255.255.0.0.
+On both systems multiple libraries for python has to be installed. Except for standard libraries (numpy, etc.), there are others, which are present in the requirements.txt file. In the Linux machine, ROS2 environment has to be installed. After that, ROS2 has to be sourced, and built (colcon build --symlink-install). Then one has to source the local workspace, and run the program using prepared launch file (ros2 launch ctu_quanser_comp startup_launch.py).
+Static IP addresses are used for the communication via local network (tested with ethernet). Linux machine has IP address 169.254.165.100, Windows 169.254.165.200, both netmasks are 255.255.0.0.
