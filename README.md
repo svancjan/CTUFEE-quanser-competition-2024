@@ -1,5 +1,12 @@
 # CTUFEE-quanser-competition-2024
 
+# Stage 2 architecture update
+
+![Stage_2](https://github.com/svancjan/CTUFEE-quanser-competition-2024/assets/161430370/3b378621-41ec-479c-8576-3455f220515e)
+
+
+
+
 # Overall Solution
 
 Our solution was developed to have the best coherence of performance and robustness to fulfil the rules of the first stage of the competition. During development, we put great emphasis on the modularity of the solution to be as transferable and versatile as possible. In anticipation of the second stage of the competition, which employs a real Qcar operating on a Linux system, we have designed our software accordingly. With the intention of utilizing the ROS 2 environment during this stage, we have established a connection layer that enables the use of a Linux PC equipped with the ROS 2 environment. This strategic approach ensures our preparedness for the forthcoming challenges of the competition. To simulate the Qcar we are running the Quanser interactive labs on a Windows PC and image processing and local planning. In Figure 1 there is a simplified graph of our solution.
